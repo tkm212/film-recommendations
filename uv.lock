@@ -398,6 +398,7 @@ version = "0.0.1"
 source = { editable = "." }
 dependencies = [
     { name = "pandas" },
+    { name = "python-dotenv" },
 ]
 
 [package.dev-dependencies]
@@ -409,14 +410,16 @@ dev = [
     { name = "mkdocstrings", extra = ["python"] },
     { name = "pre-commit" },
     { name = "pytest" },
-    { name = "python-dotenv" },
     { name = "ruff" },
     { name = "tox-uv" },
     { name = "ty" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "pandas", specifier = ">=2.3.3" }]
+requires-dist = [
+    { name = "pandas", specifier = ">=2.3.3" },
+    { name = "python-dotenv", specifier = ">=1.2.1" },
+]
 
 [package.metadata.requires-dev]
 dev = [
@@ -427,7 +430,6 @@ dev = [
     { name = "mkdocstrings", extras = ["python"], specifier = ">=1.0.0" },
     { name = "pre-commit", specifier = ">=4.5.0" },
     { name = "pytest", specifier = ">=9.0.2" },
-    { name = "python-dotenv", specifier = ">=1.2.1" },
     { name = "ruff", specifier = ">=0.14.8" },
     { name = "tox-uv", specifier = ">=1.29.0" },
     { name = "ty", specifier = ">=0.0.1a32" },
