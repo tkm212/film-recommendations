@@ -107,4 +107,4 @@ ignore = [
 preview = true
 
 [tool.deptry.per_rule_ignores]
-DEP002 = ["pandas" "python-dotenv"]
+DEP002 = ["pandas", "python-dotenv"]
