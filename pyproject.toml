@@ -18,8 +18,12 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 dependencies = [
+    "joblib>=1.5.3",
+    "numpy>=2.2.6",
     "pandas>=2.3.3",
     "python-dotenv>=1.2.1",
+    "scikit-learn>=1.7.2",
+    "tqdm>=4.67.1",
 ]
 
 [project.urls]

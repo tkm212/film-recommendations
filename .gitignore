@@ -216,3 +216,11 @@ __marimo__/
 #csvs
 *.csv
 *.xlsx
+
+#tmdb cahce
+tmbd_cache.*
+
+#jsons
+*.json
+
+tmdb_cache/
