@@ -212,3 +212,7 @@ __marimo__/
 
 # DS Store
 .DS_Store
+
+#csvs
+*.csv
+*.xlsx

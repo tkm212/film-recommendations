@@ -17,6 +17,9 @@ classifiers = [
     "Programming Language :: Python :: 3.14",
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
+dependencies = [
+    "pandas>=2.3.3",
+]
 
 [project.urls]
 Homepage = "https://tkm212.github.io/film-recommendations/"
@@ -30,11 +33,12 @@ dev = [
     "tox-uv>=1.29.0",
     "deptry>=0.24.0",
     "ty>=0.0.1a32",
-    
     "ruff>=0.14.8",
     "mkdocs>=1.6.1",
     "mkdocs-material>=9.7.0",
     "mkdocstrings[python]>=1.0.0",
+    "ipykernel>=7.1.0",
+    "python-dotenv>=1.2.1",
 ]
 
 [build-system]
@@ -101,5 +105,3 @@ ignore = [
 
 [tool.ruff.format]
 preview = true
-
-

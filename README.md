@@ -6,7 +6,7 @@
 [![Commit activity](https://img.shields.io/github/commit-activity/m/tkm212/film-recommendations)](https://img.shields.io/github/commit-activity/m/tkm212/film-recommendations)
 [![License](https://img.shields.io/github/license/tkm212/film-recommendations)](https://img.shields.io/github/license/tkm212/film-recommendations)
 
-This is a repository to predict what films a user will like based off past ratings. This will leverage machine learning etc. 
+This is a repository to predict what films a user will like based off past ratings. This will leverage machine learning etc.
 
 - **Github repository**: <https://github.com/tkm212/film-recommendations/>
 - **Documentation** <https://tkm212.github.io/film-recommendations/>

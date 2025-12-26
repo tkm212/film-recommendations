@@ -1,7 +1,7 @@
 site_name: film-recommendations
 repo_url: https://github.com/tkm212/film-recommendations
 site_url: https://tkm212.github.io/film-recommendations
-site_description: This is a repository to predict what films a user will like based off past ratings. This will leverage machine learning etc. 
+site_description: This is a repository to predict what films a user will like based off past ratings. This will leverage machine learning etc.
 site_author: Tomas Kennedy-Martin
 edit_uri: edit/main/docs/
 repo_name: tkm212/film-recommendations
