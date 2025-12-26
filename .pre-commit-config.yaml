@@ -25,8 +25,4 @@ repos:
     rev: "0.21.1"
     hooks:
       - id: deptry
-        args:
-          - "--package"
-          - "src"
-          - "--package"
-          - "notebooks"
+        args: ["src", "notebooks"]
