@@ -20,3 +20,8 @@ repos:
       - id: ruff-check
         args: [ --exit-non-zero-on-fix ]
       - id: ruff-format
+
+  - repo: https://github.com/fpgmaas/deptry
+    rev: "0.21.1"
+    hooks:
+      - id: deptry
