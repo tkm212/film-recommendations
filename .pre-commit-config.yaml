@@ -25,4 +25,4 @@ repos:
     rev: "0.21.1"
     hooks:
       - id: deptry
-        # args: ["src", "notebooks"]
+        args: ["src", "notebooks"]
