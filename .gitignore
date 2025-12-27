@@ -212,3 +212,15 @@ __marimo__/
 
 # DS Store
 .DS_Store
+
+#csvs
+*.csv
+*.xlsx
+
+#tmdb cahce
+tmbd_cache.*
+
+#jsons
+*.json
+
+tmdb_cache/
