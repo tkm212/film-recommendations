@@ -6,18 +6,10 @@ import time
 from pathlib import Path
 from typing import Any, Optional
 
-import joblib
 import numpy as np
 import pandas as pd
 import requests
 from dotenv import load_dotenv
-from scipy.stats import kendalltau, spearmanr
-from sklearn.compose import ColumnTransformer
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
-from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import OneHotEncoder, StandardScaler
-from tqdm.auto import tqdm
 
 load_dotenv()
 TMDB_API_KEY = os.getenv("API_KEY")
@@ -27,6 +19,7 @@ CACHE_DIR = Path(tempfile.mkdtemp(prefix="tmdb_cache_"))
 
 session = requests.Session()
 session.headers.update({"Accept": "application/json"})
+
 
 def _cache_path(key: str) -> Path:
     safe = re.sub(r"[^a-zA-Z0-9._-]+", "_", key)
@@ -52,6 +45,7 @@ def cached_get(url: str, params: dict[str, Any], cache_key: str, sleep_s: float 
     path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
     time.sleep(sleep_s)
     return data
+
 
 def tmdb_search_movie(title: str, year: Optional[int] = None) -> Optional[dict[str, Any]]:
     params = {"api_key": TMDB_API_KEY, "query": title, "include_adult": "false"}
@@ -82,6 +76,7 @@ def tmdb_movie_details(movie_id: int) -> dict[str, Any]:
     params = {"api_key": TMDB_API_KEY, "append_to_response": "credits,keywords"}
     data = cached_get(f"{TMDB_BASE}/movie/{movie_id}", params=params, cache_key=f"movie__{movie_id}__details")
     return data
+
 
 def safe_int(x):
     try:
