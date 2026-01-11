@@ -2,6 +2,7 @@ import json
 import os
 import re
 import tempfile
+import logging
 import time
 from pathlib import Path
 from typing import Any, Optional
@@ -10,16 +11,28 @@ import numpy as np
 import pandas as pd
 import requests
 from dotenv import load_dotenv
+from tqdm.auto import tqdm
+
+from .constants import *
+
+logger = logging.getLogger(__name__)
 
 load_dotenv()
 TMDB_API_KEY = os.getenv("API_KEY")
-TMDB_BASE = "https://api.themoviedb.org/3"
-
-CACHE_DIR = Path(tempfile.mkdtemp(prefix="tmdb_cache_"))
 
 session = requests.Session()
 session.headers.update({"Accept": "application/json"})
 
+def clean_data(film_ratings_df):
+    df = film_ratings_df.copy()
+
+    df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
+    df["Year"] = pd.to_numeric(df["Year"], errors="coerce").astype("Int64")
+    df["Rating"] = pd.to_numeric(df["Rating"], errors="coerce")
+
+    df = df.dropna(subset=["Name", "Rating"])
+    df = df.sort_values("Date").reset_index(drop=True)
+    return df
 
 def _cache_path(key: str) -> Path:
     safe = re.sub(r"[^a-zA-Z0-9._-]+", "_", key)
@@ -136,3 +149,40 @@ def extract_features_from_tmdb(details: dict[str, Any]) -> dict[str, Any]:
         "overview": overview,
         "people_text": people_text,
     }
+
+def create_features(df: pd.DataFrame)-> tuple[pd.DataFrame, pd.DataFrame]:
+    rows = []
+    missing = []
+
+    for _, r in tqdm(df.iterrows(), total=len(df)):
+        title = str(r["Name"])
+        year = int(r["Year"]) if not pd.isna(r["Year"]) else None
+
+        search = tmdb_search_movie(title, year=year)
+        if not search:
+            missing.append((title, year))
+            continue
+
+        movie_id = search.get("id")
+        if not movie_id:
+            missing.append((title, year))
+            continue
+
+        details = tmdb_movie_details(movie_id)
+        feats = extract_features_from_tmdb(details)
+
+        out = {
+            "Date": r["Date"],
+            "Name": title,
+            "Year": year,
+            "Letterboxd URI": r.get("Letterboxd URI", ""),
+            "Rating": float(r["Rating"]),
+            **feats,
+        }
+        rows.append(out)
+
+    features_df = pd.DataFrame(rows)
+    logger.info("Missing items count: %d", len(missing))
+    logger.debug("Missing items sample (first 20): %s", missing[:20])
+
+    return features_df, missing
