@@ -13,14 +13,12 @@ from dotenv import load_dotenv
 from tqdm.auto import tqdm
 
 from .constants import CACHE_DIR, TMDB_BASE
+from .data_access import create_tmdb_session
 
 logger = logging.getLogger(__name__)
 
 load_dotenv()
 TMDB_API_KEY = os.getenv("API_KEY")
-
-session = requests.Session()
-session.headers.update({"Accept": "application/json"})
 
 
 def clean_data(film_ratings_df):
@@ -47,6 +45,7 @@ def cached_get(url: str, params: dict[str, Any], cache_key: str, sleep_s: float 
     path = _cache_path(cache_key)
     if path.exists():
         return json.loads(path.read_text(encoding="utf-8"))
+    session = create_tmdb_session()
 
     r = session.get(url, params=params, timeout=30)
     try:
