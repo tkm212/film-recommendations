@@ -152,7 +152,7 @@ def extract_features_from_tmdb(details: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def create_features(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+def create_features(df: pd.DataFrame) -> tuple[pd.DataFrame, list]:
     rows = []
     missing = []
 

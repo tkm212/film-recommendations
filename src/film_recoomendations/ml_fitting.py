@@ -119,9 +119,10 @@ def fit_pipeline(
 
     pipe.fit(X_train, y_train)
     joblib.dump(pipe, "./letterboxd_tmdb_rating_model.joblib")
+    return pipe
 
 
-def make_predictions(pipe: Pipeline, X_test: pd.DataFrame, y_test: pd.Series) -> tuple[pd.DataFrame, pd.Series]:
+def make_predictions(pipe: Pipeline, X_test: pd.DataFrame, y_test: pd.Series) -> tuple[pd.DataFrame, np.ndarray]:
     pred = pipe.predict(X_test)
     pred_clipped = np.clip(pred, 0.5, 5.0)
 
