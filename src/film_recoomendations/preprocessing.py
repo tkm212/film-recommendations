@@ -1,8 +1,7 @@
 import json
+import logging
 import os
 import re
-import tempfile
-import logging
 import time
 from pathlib import Path
 from typing import Any, Optional
@@ -13,7 +12,7 @@ import requests
 from dotenv import load_dotenv
 from tqdm.auto import tqdm
 
-from .constants import *
+from .constants import CACHE_DIR, TMDB_BASE
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +21,7 @@ TMDB_API_KEY = os.getenv("API_KEY")
 
 session = requests.Session()
 session.headers.update({"Accept": "application/json"})
+
 
 def clean_data(film_ratings_df):
     df = film_ratings_df.copy()
@@ -33,6 +33,7 @@ def clean_data(film_ratings_df):
     df = df.dropna(subset=["Name", "Rating"])
     df = df.sort_values("Date").reset_index(drop=True)
     return df
+
 
 def _cache_path(key: str) -> Path:
     safe = re.sub(r"[^a-zA-Z0-9._-]+", "_", key)
@@ -150,7 +151,8 @@ def extract_features_from_tmdb(details: dict[str, Any]) -> dict[str, Any]:
         "people_text": people_text,
     }
 
-def create_features(df: pd.DataFrame)-> tuple[pd.DataFrame, pd.DataFrame]:
+
+def create_features(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     rows = []
     missing = []
 
