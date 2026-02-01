@@ -15,6 +15,20 @@ logger = logging.getLogger(__name__)
 
 
 def create_transformed_features(features_df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series]:
+    """Build derived numeric/text features and extract target for modeling.
+
+    Args:
+        features_df (pd.DataFrame): DataFrame with TMDB-derived columns
+            (budget, revenue, vote_count, genres, production_countries,
+            overview, keywords, people_text, original_language,
+            release_year_tmdb) and Rating.
+
+    Returns:
+        tuple[pd.DataFrame, pd.Series]: (data, y). data is the DataFrame
+        with added columns (log_budget, log_revenue, log_vote_count,
+        genres_count, countries_count) and filled NaNs for text fields;
+        y is the Rating target as a Series.
+    """
     data = features_df.copy()
 
     # Derived numeric features
@@ -39,6 +53,16 @@ def create_transformed_features(features_df: pd.DataFrame) -> tuple[pd.DataFrame
 def split_train_test(
     data: pd.DataFrame, test_size: float = 0.2
 ) -> tuple[pd.DataFrame, pd.Series, pd.DataFrame, pd.Series]:
+    """Split data into train and test by time (last test_size fraction as holdout).
+
+    Args:
+        data: DataFrame sorted by Date with feature columns and a Rating column.
+        test_size: Fraction of rows to use as test set (default 0.2).
+
+    Returns:
+        A tuple (X_train, y_train, X_test, y_test) of feature DataFrames and
+        target Series.
+    """
     # This can definitely be rewritten using sklearn
     data = data.sort_values("Date").reset_index(drop=True)
 
@@ -64,7 +88,18 @@ def split_train_test(
 def fit_pipeline(
     X_train: pd.DataFrame, y_train: pd.Series, save_path: str = "./letterboxd_tmdb_rating_model.joblib"
 ) -> Pipeline:
+    """Fit a Ridge regression pipeline (preprocess + model) and save to disk.
 
+    Args:
+        X_train (pd.DataFrame): Training feature DataFrame (numeric,
+            categorical, text columns).
+        y_train (pd.Series): Training target Series (Rating).
+        save_path (str): Path to save the fitted pipeline with joblib.
+            Defaults to "./letterboxd_tmdb_rating_model.joblib".
+
+    Returns:
+        Pipeline: The fitted sklearn Pipeline (preprocess + Ridge).
+    """
     text_overview = TfidfVectorizer(max_features=2500, ngram_range=(1, 2), min_df=2)
 
     text_keywords = TfidfVectorizer(max_features=1500, ngram_range=(1, 2), min_df=2)
@@ -118,11 +153,22 @@ def fit_pipeline(
     pipe = Pipeline(steps=[("preprocess", preprocess), ("model", model)])
 
     pipe.fit(X_train, y_train)
-    joblib.dump(pipe, "./letterboxd_tmdb_rating_model.joblib")
+    joblib.dump(pipe, save_path)
     return pipe
 
 
 def make_predictions(pipe: Pipeline, X_test: pd.DataFrame, y_test: pd.Series) -> tuple[pd.DataFrame, np.ndarray]:
+    """Generate predictions with a fitted pipeline and clip to [0.5, 5.0].
+
+    Args:
+        pipe: Fitted sklearn Pipeline (e.g. from fit_pipeline).
+        X_test: Test feature DataFrame.
+        y_test: Test target Series (used for eval_df and logging).
+
+    Returns:
+        A tuple (eval_df, pred_clipped). eval_df has columns Date, Name, Year,
+        Rating, pred, err; pred_clipped is the clipped prediction array.
+    """
     pred = pipe.predict(X_test)
     pred_clipped = np.clip(pred, 0.5, 5.0)
 
@@ -153,14 +199,19 @@ def evaluate_rating_predictions(
     eval_df: pd.DataFrame,
     snap_step: float = 0.5,
 ) -> dict[str, object]:
-    """
-    Evaluate snapped rating predictions with multiple metrics.
+    """Evaluate snapped rating predictions with multiple metrics.
 
-    :param y_true: True ratings
-    :param y_pred: Raw predicted ratings (after clipping, before snapping)
-    :param eval_df: DataFrame containing at least columns ["Rating", "err"]
-    :param snap_step: Rating granularity (default = 0.5 stars)
-    :return: Dictionary of evaluation results
+    Args:
+        y_true (pd.Series): True ratings.
+        y_pred (np.ndarray): Raw predicted ratings (after clipping,
+            before snapping).
+        eval_df (pd.DataFrame): DataFrame containing at least columns Rating
+            and err (used for bucketed MAE by rating).
+        snap_step (float): Rating granularity in stars. Defaults to 0.5.
+
+    Returns:
+        dict[str, object]: Keys pred_snapped, exact_match_rate,
+        within_half_star, bucket_mae_by_rating.
     """
 
     # Snap predictions to nearest step (e.g., 0.5 stars)
