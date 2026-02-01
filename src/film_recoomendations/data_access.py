@@ -12,12 +12,17 @@ logger = logging.getLogger(__name__)
 
 
 def get_tmdb_api_key(env_var: str = "API_KEY") -> str:
-    """
-    Load the TMDB API key from environment variables.
+    """Load the TMDB API key from environment variables.
 
-    :param env_var: Name of the environment variable storing the API key
-    :return: API key as a string
-    :raises ValueError: If the API key is not found
+    Args:
+        env_var (str): Name of the environment variable storing the API key.
+            Defaults to "API_KEY".
+
+    Returns:
+        str: The API key.
+
+    Raises:
+        ValueError: If the API key is not found in the environment.
     """
     load_dotenv()
     api_key = os.getenv(env_var)
@@ -30,12 +35,17 @@ def get_tmdb_api_key(env_var: str = "API_KEY") -> str:
 
 
 def get_film_ratings(ratings_path: Path | str = "../inputs/ratings.csv") -> pd.DataFrame:
-    """
-    Load film ratings data from a CSV file and log basic info.
+    """Load film ratings data from a CSV file and log basic info.
 
-    :param ratings_path: Path to the ratings CSV
-    :param log_head: Whether to log the first few rows
-    :return: Pandas DataFrame with ratings data
+    Args:
+        ratings_path (Path | str): Path to the ratings CSV file. Defaults to
+            "../inputs/ratings.csv".
+
+    Returns:
+        pd.DataFrame: Ratings data (e.g. Date, Name, Year, Rating).
+
+    Raises:
+        FileNotFoundError: If the ratings file does not exist.
     """
     ratings_path = Path(ratings_path)
 
@@ -52,8 +62,11 @@ def get_film_ratings(ratings_path: Path | str = "../inputs/ratings.csv") -> pd.D
 
 
 def create_tmdb_session() -> requests.Session:
-    """
-    Create and configure a TMDB requests session.
+    """Create and configure a TMDB requests session.
+
+    Returns:
+        requests.Session: Session with TMDB default headers
+        (Accept: application/json).
     """
     session = requests.Session()
     session.headers.update(TMDB_DEFAULT_HEADERS)

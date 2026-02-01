@@ -4,7 +4,7 @@ import os
 import re
 import time
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, Union
 
 import numpy as np
 import pandas as pd
@@ -21,7 +21,18 @@ load_dotenv()
 TMDB_API_KEY = os.getenv("API_KEY")
 
 
-def clean_data(film_ratings_df):
+def clean_data(film_ratings_df: pd.DataFrame) -> pd.DataFrame:
+    """Normalize and clean film ratings DataFrame (dates, types, dropna).
+
+    Args:
+        film_ratings_df (pd.DataFrame): Raw DataFrame with columns such as
+            Date, Name, Year, Rating (and optionally Letterboxd URI).
+
+    Returns:
+        pd.DataFrame: A copy with Date as datetime, Year as nullable int,
+        Rating as numeric, rows with missing Name or Rating dropped, and
+        sorted by Date.
+    """
     df = film_ratings_df.copy()
 
     df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
@@ -34,13 +45,33 @@ def clean_data(film_ratings_df):
 
 
 def _cache_path(key: str) -> Path:
+    """Return the filesystem path for a cache key.
+
+    Args:
+        key (str): Arbitrary cache identifier (e.g. "search__title__year").
+
+    Returns:
+        Path: Path under CACHE_DIR with key sanitized to a safe filename
+        and .json extension.
+    """
     safe = re.sub(r"[^a-zA-Z0-9._-]+", "_", key)
     return CACHE_DIR / f"{safe}.json"
 
 
 def cached_get(url: str, params: dict[str, Any], cache_key: str, sleep_s: float = 0.25) -> dict[str, Any]:
-    """
-    GET with disk cache. sleep_s adds a small delay to be polite to the API.
+    """Perform a GET request with disk cache; optional delay to be polite to the API.
+
+    Args:
+        url (str): Request URL.
+        params (dict[str, Any]): Query parameters for the request.
+        cache_key (str): Identifier for the cache file (used with _cache_path).
+        sleep_s (float): Seconds to sleep after a live request. Defaults to 0.25.
+
+    Returns:
+        dict[str, Any]: Response body as a JSON-decoded dict.
+
+    Raises:
+        RuntimeError: If the HTTP request fails (non-2xx status).
     """
     path = _cache_path(cache_key)
     if path.exists():
@@ -61,6 +92,16 @@ def cached_get(url: str, params: dict[str, Any], cache_key: str, sleep_s: float 
 
 
 def tmdb_search_movie(title: str, year: Optional[int] = None) -> Optional[dict[str, Any]]:
+    """Search TMDB for a movie by title and optional year.
+
+    Args:
+        title (str): Movie title to search for.
+        year (Optional[int]): Optional release year to narrow results.
+
+    Returns:
+        Optional[dict[str, Any]]: The best-matching movie result dict from
+        TMDB, or None if no results.
+    """
     params = {"api_key": TMDB_API_KEY, "query": title, "include_adult": "false"}
     if year and not pd.isna(year):
         params["year"] = int(year)
@@ -74,7 +115,7 @@ def tmdb_search_movie(title: str, year: Optional[int] = None) -> Optional[dict[s
     # Prefer exact-ish title match if possible, else best popularity
     title_l = title.strip().lower()
 
-    def score(item):
+    def score(item: dict[str, Any]) -> tuple[int, float]:
         t = (item.get("title") or "").lower()
         ot = (item.get("original_title") or "").lower()
         exact = 2 if (t == title_l or ot == title_l) else (1 if title_l in t else 0)
@@ -86,19 +127,44 @@ def tmdb_search_movie(title: str, year: Optional[int] = None) -> Optional[dict[s
 
 
 def tmdb_movie_details(movie_id: int) -> dict[str, Any]:
+    """Fetch full TMDB movie details including credits and keywords.
+
+    Args:
+        movie_id (int): TMDB movie ID.
+
+    Returns:
+        dict[str, Any]: Raw TMDB movie details (genres, countries, overview,
+        credits, etc.).
+    """
     params = {"api_key": TMDB_API_KEY, "append_to_response": "credits,keywords"}
     data = cached_get(f"{TMDB_BASE}/movie/{movie_id}", params=params, cache_key=f"movie__{movie_id}__details")
     return data
 
 
-def safe_int(x):
+def safe_int(x: Any) -> Union[int, float]:
+    """Convert value to int, or return NaN on failure.
+
+    Args:
+        x (Any): Value to convert (e.g. string or number).
+
+    Returns:
+        Union[int, float]: int(x) if conversion succeeds, otherwise np.nan.
+    """
     try:
         return int(x)
     except Exception:
         return np.nan
 
 
-def safe_float(x):
+def safe_float(x: Any) -> float:
+    """Convert value to float, or return NaN on failure.
+
+    Args:
+        x (Any): Value to convert (e.g. string or number).
+
+    Returns:
+        float: float(x) if conversion succeeds, otherwise np.nan.
+    """
     try:
         return float(x)
     except Exception:
@@ -106,6 +172,18 @@ def safe_float(x):
 
 
 def extract_features_from_tmdb(details: dict[str, Any]) -> dict[str, Any]:
+    """Extract a flat feature dict from TMDB movie details for modeling.
+
+    Args:
+        details (dict[str, Any]): Raw TMDB movie details (e.g. from
+            tmdb_movie_details).
+
+    Returns:
+        dict[str, Any]: Flat dict with keys such as tmdb_id, title_tmdb,
+        release_year_tmdb, runtime, budget, revenue, popularity,
+        vote_average, vote_count, original_language, genres,
+        production_countries, keywords, overview, people_text.
+    """
     genres = [g.get("name") for g in details.get("genres", []) if g.get("name")]
     countries = [c.get("iso_3166_1") for c in details.get("production_countries", []) if c.get("iso_3166_1")]
 
@@ -151,7 +229,20 @@ def extract_features_from_tmdb(details: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def create_features(df: pd.DataFrame) -> tuple[pd.DataFrame, list]:
+def create_features(df: pd.DataFrame) -> tuple[pd.DataFrame, list[tuple[str, Optional[int]]]]:
+    """Enrich a ratings DataFrame with TMDB features via search and details APIs.
+
+    Args:
+        df (pd.DataFrame): DataFrame with at least columns Name, Year, Date,
+            Rating (and optionally Letterboxd URI). Typically the output of
+            clean_data.
+
+    Returns:
+        tuple[pd.DataFrame, list[tuple[str, Optional[int]]]]: (features_df,
+        missing). features_df is a DataFrame with one row per successfully
+        enriched film; missing is a list of (title, year) pairs that could
+        not be found on TMDB.
+    """
     rows = []
     missing = []
 
