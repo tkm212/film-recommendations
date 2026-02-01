@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import ClassVar
 from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pandas as pd
 import pytest
+from conftest import assert_return_type
 
 from film_recoomendations.preprocessing import (
     _cache_path,
@@ -21,7 +23,6 @@ from film_recoomendations.preprocessing import (
     tmdb_movie_details,
     tmdb_search_movie,
 )
-from conftest import assert_return_type
 
 
 class TestCleanData:
@@ -54,9 +55,7 @@ class TestCleanData:
             assert list(result["Rating"]) == expected_ratings
 
     @pytest.mark.parametrize("check", ["datetime", "sorted"], ids=["datetime", "sorted"])
-    def test_date_column_type_and_order(
-        self, sample_film_ratings_df: pd.DataFrame, check: str
-    ) -> None:
+    def test_date_column_type_and_order(self, sample_film_ratings_df: pd.DataFrame, check: str) -> None:
         result = clean_data(sample_film_ratings_df)
         if check == "datetime":
             assert pd.api.types.is_datetime64_any_dtype(result["Date"])
@@ -104,30 +103,35 @@ class TestCachedGet:
         mock_response.json.return_value = {"data": 1}
         mock_response.raise_for_status = MagicMock()
         mock_session.get.return_value = mock_response
-        with patch("film_recoomendations.preprocessing._cache_path", return_value=cache_file):
-            with patch(
+        with (
+            patch("film_recoomendations.preprocessing._cache_path", return_value=cache_file),
+            patch(
                 "film_recoomendations.preprocessing.create_tmdb_session",
                 return_value=mock_session,
-            ):
-                result = cached_get("https://example.com", {"q": "x"}, "key")
+            ),
+        ):
+            result = cached_get("https://example.com", {"q": "x"}, "key")
         assert result == {"data": 1}
         assert isinstance(result, dict)
 
     def test_raises_runtime_error_on_http_error(self, tmp_path: Path) -> None:
         import requests as req
+
         cache_file = tmp_path / "cached.json"
         mock_session = MagicMock()
         mock_response = MagicMock()
         mock_response.status_code = 404
         mock_response.raise_for_status.side_effect = req.HTTPError("404")
         mock_session.get.return_value = mock_response
-        with patch("film_recoomendations.preprocessing._cache_path", return_value=cache_file):
-            with patch(
+        with (
+            patch("film_recoomendations.preprocessing._cache_path", return_value=cache_file),
+            patch(
                 "film_recoomendations.preprocessing.create_tmdb_session",
                 return_value=mock_session,
-            ):
-                with pytest.raises(RuntimeError) as exc_info:
-                    cached_get("https://example.com", {}, "key")
+            ),
+            pytest.raises(RuntimeError) as exc_info,
+        ):
+            cached_get("https://example.com", {}, "key")
         assert "TMDB" in str(exc_info.value) or "failed" in str(exc_info.value).lower()
 
 
@@ -166,11 +170,22 @@ class TestSafeFloat:
 class TestExtractFeaturesFromTmdb:
     """Behaviour and type tests for extract_features_from_tmdb."""
 
-    EXPECTED_KEYS = {
-        "tmdb_id", "title_tmdb", "release_year_tmdb", "runtime", "budget",
-        "revenue", "popularity", "vote_average", "vote_count",
-        "original_language", "genres", "production_countries",
-        "keywords", "overview", "people_text",
+    EXPECTED_KEYS: ClassVar[set[str]] = {
+        "tmdb_id",
+        "title_tmdb",
+        "release_year_tmdb",
+        "runtime",
+        "budget",
+        "revenue",
+        "popularity",
+        "vote_average",
+        "vote_count",
+        "original_language",
+        "genres",
+        "production_countries",
+        "keywords",
+        "overview",
+        "people_text",
     }
 
     @pytest.mark.parametrize(
@@ -178,9 +193,7 @@ class TestExtractFeaturesFromTmdb:
         ["sample_tmdb_details"],
         ids=["full_details"],
     )
-    def test_returns_dict_with_expected_keys(
-        self, request: pytest.FixtureRequest, details_fixture: str
-    ) -> None:
+    def test_returns_dict_with_expected_keys(self, request: pytest.FixtureRequest, details_fixture: str) -> None:
         details = request.getfixturevalue(details_fixture)
         result = extract_features_from_tmdb(details)
         assert_return_type(result, dict)
@@ -210,10 +223,7 @@ class TestExtractFeaturesFromTmdb:
         overview_empty: bool,
         runtime_nan: bool,
     ) -> None:
-        if details is not None:
-            details_dict = request.getfixturevalue(details)
-        else:
-            details_dict = {"id": 1, "title": "X"}
+        details_dict = request.getfixturevalue(details) if details is not None else {"id": 1, "title": "X"}
         result = extract_features_from_tmdb(details_dict)
         if expected_genres:
             assert result["genres"] == expected_genres
@@ -297,19 +307,21 @@ class TestCreateFeatures:
             "Rating": [5.0],
             "Letterboxd URI": [""],
         })
-        with patch(
-            "film_recoomendations.preprocessing.tmdb_search_movie",
-            return_value={"id": 27205},
-        ):
-            with patch(
+        with (
+            patch(
+                "film_recoomendations.preprocessing.tmdb_search_movie",
+                return_value={"id": 27205},
+            ),
+            patch(
                 "film_recoomendations.preprocessing.tmdb_movie_details",
                 return_value={"id": 27205, "title": "Inception"},
-            ):
-                with patch(
-                    "film_recoomendations.preprocessing.extract_features_from_tmdb",
-                    return_value={"tmdb_id": 27205, "title_tmdb": "Inception"},
-                ):
-                    features_df, missing = create_features(df)
+            ),
+            patch(
+                "film_recoomendations.preprocessing.extract_features_from_tmdb",
+                return_value={"tmdb_id": 27205, "title_tmdb": "Inception"},
+            ),
+        ):
+            features_df, missing = create_features(df)
         assert isinstance(features_df, pd.DataFrame)
         assert isinstance(missing, list)
         assert len(features_df) == 1

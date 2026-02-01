@@ -27,6 +27,7 @@ def assert_return_type(
     # UnionType (X | Y) in Python 3.10+
     try:
         from types import UnionType
+
         is_union = origin is typing.Union or origin is UnionType
     except ImportError:
         is_union = origin is typing.Union

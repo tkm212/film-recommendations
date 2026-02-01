@@ -8,13 +8,13 @@ from unittest.mock import patch
 import pandas as pd
 import pytest
 import requests
+from conftest import assert_return_type
 
 from film_recoomendations.data_access import (
     create_tmdb_session,
     get_film_ratings,
     get_tmdb_api_key,
 )
-from conftest import assert_return_type
 
 
 class TestGetTmdbApiKey:
@@ -22,18 +22,22 @@ class TestGetTmdbApiKey:
 
     @pytest.mark.parametrize("env_var,expected", [("API_KEY", "secret123"), ("TMDB_KEY", "custom")])
     def test_returns_str_when_env_set(self, env_var: str, expected: str) -> None:
-        with patch.dict("os.environ", {env_var: expected}, clear=False):
-            with patch("film_recoomendations.data_access.load_dotenv"):
-                result = get_tmdb_api_key(env_var)
+        with (
+            patch.dict("os.environ", {env_var: expected}, clear=False),
+            patch("film_recoomendations.data_access.load_dotenv"),
+        ):
+            result = get_tmdb_api_key(env_var)
         assert result == expected
         assert_return_type(result, str)
 
     def test_raises_value_error_when_missing(self) -> None:
-        with patch.dict("os.environ", {}, clear=False):
-            with patch("film_recoomendations.data_access.load_dotenv"):
-                with patch("os.getenv", return_value=None):
-                    with pytest.raises(ValueError) as exc_info:
-                        get_tmdb_api_key("API_KEY")
+        with (
+            patch.dict("os.environ", {}, clear=False),
+            patch("film_recoomendations.data_access.load_dotenv"),
+            patch("os.getenv", return_value=None),
+            pytest.raises(ValueError) as exc_info,
+        ):
+            get_tmdb_api_key("API_KEY")
         assert "API_KEY" in str(exc_info.value)
         assert "Missing API key" in str(exc_info.value)
 
