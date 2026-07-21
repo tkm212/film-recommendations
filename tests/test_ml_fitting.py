@@ -1,4 +1,4 @@
-"""Tests for film_recoomendations.ml_fitting: behaviour and return types."""
+"""Tests for film_recommendations.ml_fitting: behaviour and return types."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ import pytest
 from conftest import assert_return_type
 from sklearn.pipeline import Pipeline
 
-from film_recoomendations.ml_fitting import (
+from film_recommendations.ml_fitting import (
     create_transformed_features,
     evaluate_rating_predictions,
     fit_pipeline,
@@ -96,7 +96,7 @@ class TestFitPipeline:
         data, _y = create_transformed_features(sample_features_df)
         X_train, y_train, _, _ = split_train_test(data)
         save_path = str(tmp_path / "model.joblib")
-        with patch("film_recoomendations.ml_fitting.joblib.dump"):
+        with patch("film_recommendations.ml_fitting.joblib.dump"):
             result = fit_pipeline(X_train, y_train, save_path=save_path)
         assert_return_type(result, Pipeline)
         assert isinstance(result, Pipeline)
@@ -105,7 +105,7 @@ class TestFitPipeline:
         data, _y = create_transformed_features(sample_features_df)
         X_train, y_train, _, _ = split_train_test(data)
         save_path = str(tmp_path / "model.joblib")
-        with patch("film_recoomendations.ml_fitting.joblib.dump") as mock_dump:
+        with patch("film_recommendations.ml_fitting.joblib.dump") as mock_dump:
             fit_pipeline(X_train, y_train, save_path=save_path)
         mock_dump.assert_called_once()
         args, _kwargs = mock_dump.call_args
@@ -114,7 +114,7 @@ class TestFitPipeline:
     def test_pipeline_has_preprocess_and_model_steps(self, sample_features_df: pd.DataFrame, tmp_path: Path) -> None:
         data, _ = create_transformed_features(sample_features_df)
         X_train, y_train, _, _ = split_train_test(data)
-        with patch("film_recoomendations.ml_fitting.joblib.dump"):
+        with patch("film_recommendations.ml_fitting.joblib.dump"):
             pipe = fit_pipeline(X_train, y_train, save_path=str(tmp_path / "m.joblib"))
         assert "preprocess" in pipe.named_steps
         assert "model" in pipe.named_steps
@@ -127,7 +127,7 @@ class TestMakePredictions:
     def fitted_pipe_and_test(self, sample_features_df: pd.DataFrame, tmp_path: Path) -> tuple:
         data, _ = create_transformed_features(sample_features_df)
         X_train, y_train, X_test, y_test = split_train_test(data)
-        with patch("film_recoomendations.ml_fitting.joblib.dump"):
+        with patch("film_recommendations.ml_fitting.joblib.dump"):
             pipe = fit_pipeline(X_train, y_train, save_path=str(tmp_path / "m.joblib"))
         return pipe, X_test, y_test
 

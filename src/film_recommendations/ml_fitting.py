@@ -1,3 +1,5 @@
+"""Train, predict, and evaluate the Letterboxd rating model."""
+
 import logging
 
 import joblib
@@ -10,6 +12,27 @@ from sklearn.linear_model import Ridge
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
+
+from .constants import (
+    CATEGORICAL_FEATURES,
+    DEFAULT_MODEL_PATH,
+    DEFAULT_SNAP_STEP,
+    DEFAULT_TEST_SIZE,
+    NUMERIC_FEATURES,
+    RANDOM_STATE,
+    RATING_CLIP_MAX,
+    RATING_CLIP_MIN,
+    RIDGE_ALPHA,
+    SPARSE_THRESHOLD,
+    TARGET_COLUMN,
+    TEXT_FEATURE_COLUMNS,
+    TFIDF_KEYWORDS_MAX_FEATURES,
+    TFIDF_MIN_DF,
+    TFIDF_NGRAM_RANGE,
+    TFIDF_OVERVIEW_MAX_FEATURES,
+    TFIDF_PEOPLE_MAX_FEATURES,
+    TFIDF_PIPE_MAX_FEATURES,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -41,44 +64,43 @@ def create_transformed_features(features_df: pd.DataFrame) -> tuple[pd.DataFrame
     )
 
     # Fill missing for text fields
-    for col in ["overview", "keywords", "people_text", "genres", "production_countries", "original_language"]:
+    for col in TEXT_FEATURE_COLUMNS:
         data[col] = data[col].fillna("")
 
     # Target
-    y = data["Rating"].astype(float)
+    y = data[TARGET_COLUMN].astype(float)
 
     return data, y
 
 
 def split_train_test(
-    data: pd.DataFrame, test_size: float = 0.2
+    data: pd.DataFrame, test_size: float = DEFAULT_TEST_SIZE
 ) -> tuple[pd.DataFrame, pd.Series, pd.DataFrame, pd.Series]:
     """Split data into train and test by time (last test_size fraction as holdout).
 
     Args:
-        data: DataFrame sorted by Date with feature columns and a Rating column.
-        test_size: Fraction of rows to use as test set (default 0.2).
+        data (pd.DataFrame): DataFrame sorted by Date with feature columns
+            and a Rating column.
+        test_size (float): Fraction of rows to use as test set. Defaults to
+            DEFAULT_TEST_SIZE.
 
     Returns:
-        A tuple (X_train, y_train, X_test, y_test) of feature DataFrames and
-        target Series.
+        tuple[pd.DataFrame, pd.Series, pd.DataFrame, pd.Series]: (X_train,
+        y_train, X_test, y_test) of feature DataFrames and target Series.
     """
     # This can definitely be rewritten using sklearn
     data = data.sort_values("Date").reset_index(drop=True)
 
-    # Use last 20% as holdout
     train_size = 1 - test_size
     cut = int(len(data) * train_size)
     train_df = data.iloc[:cut].copy()
     test_df = data.iloc[cut:].copy()
 
-    TARGET = "Rating"
+    X_train = train_df.drop(columns=[TARGET_COLUMN])
+    y_train = train_df[TARGET_COLUMN].astype(float)
 
-    X_train = train_df.drop(columns=[TARGET])
-    y_train = train_df[TARGET].astype(float)
-
-    X_test = test_df.drop(columns=[TARGET])
-    y_test = test_df[TARGET].astype(float)
+    X_test = test_df.drop(columns=[TARGET_COLUMN])
+    y_test = test_df[TARGET_COLUMN].astype(float)
 
     logging.info(len(train_df), len(test_df))
 
@@ -86,7 +108,9 @@ def split_train_test(
 
 
 def fit_pipeline(
-    X_train: pd.DataFrame, y_train: pd.Series, save_path: str = "./letterboxd_tmdb_rating_model.joblib"
+    X_train: pd.DataFrame,
+    y_train: pd.Series,
+    save_path: str = DEFAULT_MODEL_PATH,
 ) -> Pipeline:
     """Fit a Ridge regression pipeline (preprocess + model) and save to disk.
 
@@ -95,36 +119,36 @@ def fit_pipeline(
             categorical, text columns).
         y_train (pd.Series): Training target Series (Rating).
         save_path (str): Path to save the fitted pipeline with joblib.
-            Defaults to "./letterboxd_tmdb_rating_model.joblib".
+            Defaults to DEFAULT_MODEL_PATH.
 
     Returns:
         Pipeline: The fitted sklearn Pipeline (preprocess + Ridge).
     """
-    text_overview = TfidfVectorizer(max_features=2500, ngram_range=(1, 2), min_df=2)
+    text_overview = TfidfVectorizer(
+        max_features=TFIDF_OVERVIEW_MAX_FEATURES,
+        ngram_range=TFIDF_NGRAM_RANGE,
+        min_df=TFIDF_MIN_DF,
+    )
 
-    text_keywords = TfidfVectorizer(max_features=1500, ngram_range=(1, 2), min_df=2)
+    text_keywords = TfidfVectorizer(
+        max_features=TFIDF_KEYWORDS_MAX_FEATURES,
+        ngram_range=TFIDF_NGRAM_RANGE,
+        min_df=TFIDF_MIN_DF,
+    )
 
-    text_people = TfidfVectorizer(max_features=1500, ngram_range=(1, 2), min_df=2)
+    text_people = TfidfVectorizer(
+        max_features=TFIDF_PEOPLE_MAX_FEATURES,
+        ngram_range=TFIDF_NGRAM_RANGE,
+        min_df=TFIDF_MIN_DF,
+    )
 
     # Treat pipe-separated as space-separated tokens, then TF-IDF
     pipe_as_text = TfidfVectorizer(
-        max_features=800, tokenizer=lambda s: s.split("|"), preprocessor=lambda s: s, token_pattern=None
+        max_features=TFIDF_PIPE_MAX_FEATURES,
+        tokenizer=lambda s: s.split("|"),
+        preprocessor=lambda s: s,
+        token_pattern=None,
     )
-
-    numeric_features = [
-        "runtime",
-        "popularity",
-        "vote_average",
-        "vote_count",
-        "log_budget",
-        "log_revenue",
-        "log_vote_count",
-        "genres_count",
-        "countries_count",
-        "release_year_tmdb",
-    ]
-
-    categorical_features = ["original_language"]
 
     preprocess = ColumnTransformer(
         transformers=[
@@ -135,9 +159,9 @@ def fit_pipeline(
                         ("impute", StandardScaler(with_mean=False)),  # works with sparse output too
                     ]
                 ),
-                numeric_features,
+                NUMERIC_FEATURES,
             ),
-            ("lang", OneHotEncoder(handle_unknown="ignore"), categorical_features),
+            ("lang", OneHotEncoder(handle_unknown="ignore"), CATEGORICAL_FEATURES),
             ("overview", text_overview, "overview"),
             ("keywords", text_keywords, "keywords"),
             ("people", text_people, "people_text"),
@@ -145,10 +169,10 @@ def fit_pipeline(
             ("countries", pipe_as_text, "production_countries"),
         ],
         remainder="drop",
-        sparse_threshold=0.3,
+        sparse_threshold=SPARSE_THRESHOLD,
     )
 
-    model = Ridge(alpha=2.0, random_state=42)
+    model = Ridge(alpha=RIDGE_ALPHA, random_state=RANDOM_STATE)
 
     pipe = Pipeline(steps=[("preprocess", preprocess), ("model", model)])
 
@@ -161,16 +185,17 @@ def make_predictions(pipe: Pipeline, X_test: pd.DataFrame, y_test: pd.Series) ->
     """Generate predictions with a fitted pipeline and clip to [0.5, 5.0].
 
     Args:
-        pipe: Fitted sklearn Pipeline (e.g. from fit_pipeline).
-        X_test: Test feature DataFrame.
-        y_test: Test target Series (used for eval_df and logging).
+        pipe (Pipeline): Fitted sklearn Pipeline (e.g. from fit_pipeline).
+        X_test (pd.DataFrame): Test feature DataFrame.
+        y_test (pd.Series): Test target Series (used for eval_df and logging).
 
     Returns:
-        A tuple (eval_df, pred_clipped). eval_df has columns Date, Name, Year,
-        Rating, pred, err; pred_clipped is the clipped prediction array.
+        tuple[pd.DataFrame, np.ndarray]: (eval_df, pred_clipped). eval_df has
+        columns Date, Name, Year, Rating, pred, err; pred_clipped is the
+        clipped prediction array.
     """
     pred = pipe.predict(X_test)
-    pred_clipped = np.clip(pred, 0.5, 5.0)
+    pred_clipped = np.clip(pred, RATING_CLIP_MIN, RATING_CLIP_MAX)
 
     mae = mean_absolute_error(y_test, pred_clipped)
     rmse = mean_squared_error(y_test, pred_clipped)
@@ -197,7 +222,7 @@ def evaluate_rating_predictions(
     y_true: pd.Series,
     y_pred: np.ndarray,
     eval_df: pd.DataFrame,
-    snap_step: float = 0.5,
+    snap_step: float = DEFAULT_SNAP_STEP,
 ) -> dict[str, object]:
     """Evaluate snapped rating predictions with multiple metrics.
 
@@ -207,13 +232,13 @@ def evaluate_rating_predictions(
             before snapping).
         eval_df (pd.DataFrame): DataFrame containing at least columns Rating
             and err (used for bucketed MAE by rating).
-        snap_step (float): Rating granularity in stars. Defaults to 0.5.
+        snap_step (float): Rating granularity in stars. Defaults to
+            DEFAULT_SNAP_STEP.
 
     Returns:
         dict[str, object]: Keys pred_snapped, exact_match_rate,
         within_half_star, bucket_mae_by_rating.
     """
-
     # Snap predictions to nearest step (e.g., 0.5 stars)
     pred_snapped = np.round(y_pred / snap_step) * snap_step
 

@@ -1,4 +1,4 @@
-"""Tests for film_recoomendations.data_access: behaviour and return types."""
+"""Tests for film_recommendations.data_access: behaviour and return types."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ import pytest
 import requests
 from conftest import assert_return_type
 
-from film_recoomendations.data_access import (
+from film_recommendations.data_access import (
     create_tmdb_session,
     get_film_ratings,
     get_tmdb_api_key,
@@ -24,7 +24,7 @@ class TestGetTmdbApiKey:
     def test_returns_str_when_env_set(self, env_var: str, expected: str) -> None:
         with (
             patch.dict("os.environ", {env_var: expected}, clear=False),
-            patch("film_recoomendations.data_access.load_dotenv"),
+            patch("film_recommendations.data_access.load_dotenv"),
         ):
             result = get_tmdb_api_key(env_var)
         assert result == expected
@@ -33,7 +33,7 @@ class TestGetTmdbApiKey:
     def test_raises_value_error_when_missing(self) -> None:
         with (
             patch.dict("os.environ", {}, clear=False),
-            patch("film_recoomendations.data_access.load_dotenv"),
+            patch("film_recommendations.data_access.load_dotenv"),
             patch("os.getenv", return_value=None),
             pytest.raises(ValueError) as exc_info,
         ):
