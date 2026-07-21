@@ -5,16 +5,12 @@ description = "This is a repository to predict what films a user will like based
 authors = [{ name = "Tomas Kennedy-Martin", email = "tkm212bc@gmail.com" }]
 readme = "README.md"
 keywords = ['python']
-requires-python = ">=3.10,<4.0"
+requires-python = ">=3.12,<3.13"
 classifiers = [
     "Intended Audience :: Developers",
     "Programming Language :: Python",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3.13",
-    "Programming Language :: Python :: 3.14",
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 dependencies = [
@@ -56,13 +52,13 @@ packages = ["src/film_recommendations"]
 
 [tool.ty.environment]
 python = "./.venv"
-python-version = "3.10"
+python-version = "3.12"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 
 [tool.ruff]
-target-version = "py39"
+target-version = "py312"
 line-length = 120
 fix = true
 
