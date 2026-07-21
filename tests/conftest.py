@@ -37,7 +37,7 @@ def assert_return_type(
     elif origin is tuple and args:
         assert isinstance(value, tuple), f"expected tuple, got {type(value)}"
         assert len(value) == len(args), f"expected tuple of length {len(args)}, got {len(value)}"
-        for v, t in zip(value, args):
+        for v, t in zip(value, args, strict=True):
             assert_return_type(v, t, allow_none=(t is type(None)))
     elif origin is dict and args:
         key_t, val_t = args

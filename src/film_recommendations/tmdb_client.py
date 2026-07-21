@@ -5,7 +5,7 @@ import logging
 import re
 import time
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import pandas as pd
 import requests
@@ -74,7 +74,7 @@ def cached_get(
     return data
 
 
-def tmdb_search_movie(title: str, year: Optional[int] = None) -> Optional[dict[str, Any]]:
+def tmdb_search_movie(title: str, year: int | None = None) -> dict[str, Any] | None:
     """Search TMDB for a movie by title and optional year.
 
     Args:

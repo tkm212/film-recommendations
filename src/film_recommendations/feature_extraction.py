@@ -1,7 +1,7 @@
 """Extract modeling features from TMDB details and enrich ratings DataFrames."""
 
 import logging
-from typing import Any, Optional, Union
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -13,7 +13,7 @@ from .tmdb_client import tmdb_movie_details, tmdb_search_movie
 logger = logging.getLogger(__name__)
 
 
-def safe_int(x: Any) -> Union[int, float]:
+def safe_int(x: Any) -> int | float:
     """Convert value to int, or return NaN on failure.
 
     Args:
@@ -101,7 +101,7 @@ def extract_features_from_tmdb(details: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def create_features(df: pd.DataFrame) -> tuple[pd.DataFrame, list[tuple[str, Optional[int]]]]:
+def create_features(df: pd.DataFrame) -> tuple[pd.DataFrame, list[tuple[str, int | None]]]:
     """Enrich a ratings DataFrame with TMDB features via search and details APIs.
 
     Args:
