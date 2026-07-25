@@ -12,6 +12,23 @@ This is currently a side-project so needs a lot of work to get into good shape!
 - **Github repository**: <https://github.com/tkm212/film-recommendations/>
 - **Documentation** <https://tkm212.github.io/film-recommendations/>
 
+## Running the pipeline
+
+A single CLI script trains the Ridge baseline model and serves a Dash dashboard with the results at <http://127.0.0.1:8050>:
+
+```bash
+# Serve the dashboard from the last saved predictions
+uv run python scripts/main.py
+
+# Retrain on the cached TMDB features (outputs/ratings_with_tmdb_features.csv), then serve
+uv run python scripts/main.py --train
+
+# Re-run the heavy TMDB feature engineering (live API calls, needs API_KEY in .env), train, then serve
+uv run python scripts/main.py --ingest
+```
+
+Use `--port` to serve on a different port.
+
 ## Getting started with your project
 
 ### 1. Create a New Repository

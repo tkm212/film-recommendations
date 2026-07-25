@@ -37,6 +37,16 @@ from .constants import (
 logger = logging.getLogger(__name__)
 
 
+def _split_on_pipe(s: str) -> list[str]:
+    """Tokenize a pipe-separated string (module-level so the pipeline is picklable)."""
+    return s.split("|")
+
+
+def _identity(s: str) -> str:
+    """Pass-through preprocessor (module-level so the pipeline is picklable)."""
+    return s
+
+
 def create_transformed_features(features_df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series]:
     """Build derived numeric/text features and extract target for modeling.
 
@@ -102,7 +112,7 @@ def split_train_test(
     X_test = test_df.drop(columns=[TARGET_COLUMN])
     y_test = test_df[TARGET_COLUMN].astype(float)
 
-    logging.info(len(train_df), len(test_df))
+    logger.info("Train rows: %d | Test rows: %d", len(train_df), len(test_df))
 
     return X_train, y_train, X_test, y_test
 
@@ -145,8 +155,8 @@ def fit_pipeline(
     # Treat pipe-separated as space-separated tokens, then TF-IDF
     pipe_as_text = TfidfVectorizer(
         max_features=TFIDF_PIPE_MAX_FEATURES,
-        tokenizer=lambda s: s.split("|"),
-        preprocessor=lambda s: s,
+        tokenizer=_split_on_pipe,
+        preprocessor=_identity,
         token_pattern=None,
     )
 
