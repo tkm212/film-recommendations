@@ -1,6 +1,7 @@
 """Train, predict, and evaluate the Letterboxd rating model."""
 
 import logging
+from typing import TypedDict
 
 import joblib
 import numpy as np
@@ -228,12 +229,21 @@ def make_predictions(pipe: Pipeline, X_test: pd.DataFrame, y_test: pd.Series) ->
     return eval_df, pred_clipped
 
 
+class RatingEvaluation(TypedDict):
+    """Evaluation results for snapped rating predictions."""
+
+    pred_snapped: np.ndarray
+    exact_match_rate: float
+    within_half_star: float
+    bucket_mae_by_rating: pd.Series
+
+
 def evaluate_rating_predictions(
     y_true: pd.Series,
     y_pred: np.ndarray,
     eval_df: pd.DataFrame,
     snap_step: float = DEFAULT_SNAP_STEP,
-) -> dict[str, object]:
+) -> RatingEvaluation:
     """Evaluate snapped rating predictions with multiple metrics.
 
     Args:
@@ -246,7 +256,7 @@ def evaluate_rating_predictions(
             DEFAULT_SNAP_STEP.
 
     Returns:
-        dict[str, object]: Keys pred_snapped, exact_match_rate,
+        RatingEvaluation: Keys pred_snapped, exact_match_rate,
         within_half_star, bucket_mae_by_rating.
     """
     # Snap predictions to nearest step (e.g., 0.5 stars)
