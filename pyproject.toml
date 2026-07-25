@@ -14,9 +14,11 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 dependencies = [
+    "dash>=4.4.1",
     "joblib>=1.5.3",
     "numpy>=2.2.6",
     "pandas>=2.3.3",
+    "plotly>=6.9.0",
     "python-dotenv>=1.2.1",
     "requests>=2.32.5",
     "scikit-learn>=1.7.2",
@@ -106,6 +108,9 @@ ignore = [
 
 [tool.ruff.format]
 preview = true
+
+[tool.deptry]
+known_first_party = ["film_recommendations"]
 
 [tool.deptry.per_rule_ignores]
 DEP002 = ["pandas", "python-dotenv"]

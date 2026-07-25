@@ -1,6 +1,7 @@
 """Train, predict, and evaluate the Letterboxd rating model."""
 
 import logging
+from typing import TypedDict
 
 import joblib
 import numpy as np
@@ -35,6 +36,16 @@ from .constants import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _split_on_pipe(s: str) -> list[str]:
+    """Tokenize a pipe-separated string (module-level so the pipeline is picklable)."""
+    return s.split("|")
+
+
+def _identity(s: str) -> str:
+    """Pass-through preprocessor (module-level so the pipeline is picklable)."""
+    return s
 
 
 def create_transformed_features(features_df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series]:
@@ -102,7 +113,7 @@ def split_train_test(
     X_test = test_df.drop(columns=[TARGET_COLUMN])
     y_test = test_df[TARGET_COLUMN].astype(float)
 
-    logging.info(len(train_df), len(test_df))
+    logger.info("Train rows: %d | Test rows: %d", len(train_df), len(test_df))
 
     return X_train, y_train, X_test, y_test
 
@@ -145,8 +156,8 @@ def fit_pipeline(
     # Treat pipe-separated as space-separated tokens, then TF-IDF
     pipe_as_text = TfidfVectorizer(
         max_features=TFIDF_PIPE_MAX_FEATURES,
-        tokenizer=lambda s: s.split("|"),
-        preprocessor=lambda s: s,
+        tokenizer=_split_on_pipe,
+        preprocessor=_identity,
         token_pattern=None,
     )
 
@@ -218,12 +229,21 @@ def make_predictions(pipe: Pipeline, X_test: pd.DataFrame, y_test: pd.Series) ->
     return eval_df, pred_clipped
 
 
+class RatingEvaluation(TypedDict):
+    """Evaluation results for snapped rating predictions."""
+
+    pred_snapped: np.ndarray
+    exact_match_rate: float
+    within_half_star: float
+    bucket_mae_by_rating: pd.Series
+
+
 def evaluate_rating_predictions(
     y_true: pd.Series,
     y_pred: np.ndarray,
     eval_df: pd.DataFrame,
     snap_step: float = DEFAULT_SNAP_STEP,
-) -> dict[str, object]:
+) -> RatingEvaluation:
     """Evaluate snapped rating predictions with multiple metrics.
 
     Args:
@@ -236,7 +256,7 @@ def evaluate_rating_predictions(
             DEFAULT_SNAP_STEP.
 
     Returns:
-        dict[str, object]: Keys pred_snapped, exact_match_rate,
+        RatingEvaluation: Keys pred_snapped, exact_match_rate,
         within_half_star, bucket_mae_by_rating.
     """
     # Snap predictions to nearest step (e.g., 0.5 stars)
