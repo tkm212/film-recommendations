@@ -12,10 +12,12 @@ import argparse
 import logging
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 from film_recommendations.cleaning import clean_data
-from film_recommendations.dashboard import build_results_app
+from film_recommendations.constants import RATING_CLIP_MAX, RATING_CLIP_MIN
+from film_recommendations.dashboard import create_app
 from film_recommendations.data_access import get_film_ratings
 from film_recommendations.feature_extraction import create_features
 from film_recommendations.ml_fitting import (
@@ -32,7 +34,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 RATINGS_FILE = REPO_ROOT / "inputs" / "ratings.csv"
 FEATURES_FILE = REPO_ROOT / "outputs" / "ratings_with_tmdb_features.csv"
 MODEL_FILE = REPO_ROOT / "models" / "letterboxd_tmdb_rating_model.joblib"
-PREDICTIONS_FILE = REPO_ROOT / "outputs" / "model_predictions.csv"
+FILMS_FILE = REPO_ROOT / "outputs" / "films_with_predictions.csv"
 
 
 def ingest_features() -> pd.DataFrame:
@@ -71,11 +73,15 @@ def load_cached_features() -> pd.DataFrame:
 def train(features_df: pd.DataFrame) -> pd.DataFrame:
     """Fit the model, evaluate on the holdout set, and save model + predictions.
 
+    Predictions are generated for every film (train and test) so the dashboard
+    can explore the full collection; evaluation metrics use the test split only.
+
     Args:
         features_df (pd.DataFrame): TMDB-enriched features DataFrame.
 
     Returns:
-        pd.DataFrame: Holdout predictions (Date, Name, Year, Rating, pred, err).
+        pd.DataFrame: All films with feature columns plus pred, err and split
+        ("train"/"test") columns.
     """
     features_df, _ = create_transformed_features(features_df)
     X_train, y_train, X_test, y_test = split_train_test(features_df)
@@ -87,25 +93,35 @@ def train(features_df: pd.DataFrame) -> pd.DataFrame:
     eval_df, pred_clipped = make_predictions(pipe, X_test, y_test)
     results = evaluate_rating_predictions(y_test, pred_clipped, eval_df)
 
-    PREDICTIONS_FILE.parent.mkdir(parents=True, exist_ok=True)
-    eval_df.to_csv(PREDICTIONS_FILE, index=False)
-    logger.info("Saved holdout predictions to %s", PREDICTIONS_FILE)
+    films_df = pd.concat(
+        [
+            X_train.assign(Rating=y_train, split="train"),
+            X_test.assign(Rating=y_test, split="test"),
+        ],
+        ignore_index=True,
+    )
+    films_df["pred"] = np.clip(pipe.predict(films_df), RATING_CLIP_MIN, RATING_CLIP_MAX)
+    films_df["err"] = films_df["pred"] - films_df["Rating"]
+
+    FILMS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    films_df.to_csv(FILMS_FILE, index=False)
+    logger.info("Saved films with predictions to %s", FILMS_FILE)
 
     logger.info("Exact match rate (nearest 0.5 star): %.1f%%", results["exact_match_rate"] * 100)
     logger.info("Within one snap step (0.5 star):     %.1f%%", results["within_half_star"] * 100)
-    return eval_df
+    return films_df
 
 
 def load_saved_predictions() -> pd.DataFrame:
-    """Load the last saved holdout predictions.
+    """Load the last saved films-with-predictions table.
 
     Raises:
         FileNotFoundError: If no predictions have been saved yet.
     """
-    if not PREDICTIONS_FILE.exists():
-        msg = f"Predictions file not found: {PREDICTIONS_FILE}. Run with --train first."
+    if not FILMS_FILE.exists():
+        msg = f"Predictions file not found: {FILMS_FILE}. Run with --train first."
         raise FileNotFoundError(msg)
-    return pd.read_csv(PREDICTIONS_FILE, parse_dates=["Date"])
+    return pd.read_csv(FILMS_FILE, parse_dates=["Date"])
 
 
 def parse_args() -> argparse.Namespace:
@@ -133,13 +149,13 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 
     if args.ingest:
-        eval_df = train(ingest_features())
+        films_df = train(ingest_features())
     elif args.train:
-        eval_df = train(load_cached_features())
+        films_df = train(load_cached_features())
     else:
-        eval_df = load_saved_predictions()
+        films_df = load_saved_predictions()
 
-    app = build_results_app(eval_df)
+    app = create_app(films_df)
     app.run(host="127.0.0.1", port=args.port, debug=False)
 
 

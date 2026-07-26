@@ -98,6 +98,7 @@ def extract_features_from_tmdb(details: dict[str, Any]) -> dict[str, Any]:
         "keywords": " ".join([k for k in keywords if k]) if keywords else "",
         "overview": overview,
         "people_text": people_text,
+        "poster_path": details.get("poster_path") or "",
     }
 
 
