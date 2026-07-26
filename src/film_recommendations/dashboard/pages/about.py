@@ -5,8 +5,6 @@ from dash import html
 
 from ..components import card, page_header, section_title
 
-dash.register_page(__name__, path="/about", name="About", title="Film Recommendations — About")
-
 
 def _item(term: str, description: str) -> html.Div:
     return html.Div(
@@ -67,3 +65,7 @@ def layout() -> html.Div:
             ),
         ]),
     ])
+
+
+# Registered after layout is defined so dash.page_registry picks it up.
+dash.register_page(__name__, path="/about", name="About", title="Film Recommendations — About", layout=layout)

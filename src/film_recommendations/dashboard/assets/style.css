@@ -149,42 +149,105 @@ body {
   color: #9aa0a6;
 }
 
-/* Filters */
-.filter-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 20px;
-  align-items: end;
-}
-
-.control-label {
-  display: block;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.8px;
-  text-transform: uppercase;
-  color: #5f6368;
-  margin-bottom: 8px;
-}
-
-.filter-footer {
+/* Filter toolbar (sticky under the navbar) */
+.toolbar {
+  position: sticky;
+  top: 64px;
+  z-index: 50;
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  align-items: flex-end;
+  flex-wrap: wrap;
   gap: 16px;
-  margin-top: 14px;
-  min-height: 18px;
+  background: #ffffff;
+  border: 1px solid #dadce0;
+  border-radius: 12px;
+  padding: 10px 16px 12px;
+  margin-bottom: 20px;
+  box-shadow: 0 1px 2px rgba(60, 64, 67, 0.08);
+}
+
+.toolbar-item {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.toolbar-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.7px;
+  text-transform: uppercase;
+  color: #9aa0a6;
+}
+
+.toolbar-dd {
+  width: 190px;
+}
+
+.toolbar-search {
+  width: 230px;
+}
+
+.toolbar-slider {
+  width: 170px;
+  padding-bottom: 4px;
+}
+
+.toolbar-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  margin-left: auto;
+  padding-bottom: 4px;
+}
+
+/* Compact controls inside the toolbar */
+.toolbar .Select-control {
+  min-height: 32px !important;
+  height: auto;
+  font-size: 12px;
+}
+
+.toolbar .Select-placeholder,
+.toolbar .Select-input {
+  line-height: 30px !important;
+  font-size: 12px;
+}
+
+.toolbar .Select--multi .Select-value {
+  margin-top: 3px;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.toolbar .search-input {
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+.toolbar .rc-slider {
+  height: 10px;
+  margin-top: 10px;
+}
+
+.toolbar .rc-slider-handle {
+  width: 12px;
+  height: 12px;
+  margin-top: -4px;
 }
 
 .filter-count {
   font-size: 12px;
   color: #9aa0a6;
+  white-space: nowrap;
 }
 
 .filter-selected {
   font-size: 12px;
   font-weight: 500;
   color: #1a73e8;
+  text-align: right;
 }
 
 /* Graphs */

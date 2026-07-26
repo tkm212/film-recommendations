@@ -1,6 +1,7 @@
 """Reusable UI components shared by all dashboard pages."""
 
 from dash import dash_table, dcc, html
+from dash.development.base_component import Component
 
 from .theme import COLORS
 
@@ -67,7 +68,7 @@ def metric_row(cards: list[html.Div]) -> html.Div:
     return html.Div(children=cards, className="metric-row")
 
 
-def control(label: str, component: object) -> html.Div:
+def control(label: str, component: Component) -> html.Div:
     """A filter control with a small caption label above it."""
     return html.Div(children=[html.Label(label, className="control-label"), component], className="control")
 

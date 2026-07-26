@@ -2,6 +2,7 @@
 
 import numpy as np
 import pandas as pd
+import pycountry
 from scipy.stats import spearmanr
 from sklearn.metrics import mean_absolute_error, r2_score, root_mean_squared_error
 
@@ -63,9 +64,28 @@ def genre_options() -> list[str]:
     return sorted(genres)
 
 
-def language_options() -> list[str]:
-    """Sorted unique original languages across all films."""
-    return sorted({lang for lang in get_films()["original_language"] if lang})
+# TMDB uses two codes that are not valid ISO 639-1 and can't be resolved
+# from the pycountry database.
+_TMDB_LANGUAGE_OVERRIDES = {"cn": "Cantonese", "xx": "No language"}
+
+
+def language_name(code: str) -> str:
+    """Human-readable language name for an ISO 639-1 code (falls back to the code)."""
+    if code in _TMDB_LANGUAGE_OVERRIDES:
+        return _TMDB_LANGUAGE_OVERRIDES[code]
+    language = pycountry.languages.get(alpha_2=code)
+    if language is None:
+        return code
+    return getattr(language, "name", code)
+
+
+def language_options() -> list[dict]:
+    """Dropdown options for languages: full names as labels, codes as values."""
+    codes = {lang for lang in get_films()["original_language"] if lang}
+    return sorted(
+        ({"label": language_name(code), "value": code} for code in codes),
+        key=lambda option: option["label"],
+    )
 
 
 def year_bounds() -> tuple[int, int]:

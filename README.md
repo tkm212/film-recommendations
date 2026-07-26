@@ -14,7 +14,7 @@ This is currently a side-project so needs a lot of work to get into good shape!
 
 ## Running the pipeline
 
-A single CLI script trains the Ridge baseline model and serves a Dash dashboard with the results at <http://127.0.0.1:8050>:
+A single CLI script trains the Ridge baseline model and serves a multi-page Dash dashboard at <http://127.0.0.1:8050> — an Overview page with cross-filterable metrics and charts, a Films explorer with posters and per-film details, and an About page describing the methodology:
 
 ```bash
 # Serve the dashboard from the last saved predictions

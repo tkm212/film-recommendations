@@ -3,81 +3,80 @@
 import dash
 import pandas as pd
 from dash import Input, Output, callback, dcc, html
+from dash.development.base_component import Component
 
 from .. import data
-from ..components import card, control, data_table, metric_card, metric_row, page_header, section_title
+from ..components import card, data_table, metric_card, metric_row, page_header, section_title
 from ..figures import empty_figure, error_histogram_figure, mae_by_rating_figure, predicted_vs_actual_figure
 from ..theme import COLORS
-
-dash.register_page(__name__, path="/", name="Overview", title="Film Recommendations — Overview")
 
 MISS_COLUMNS = [
     {"name": "Watched", "id": "Date"},
     {"name": "Film", "id": "Name"},
     {"name": "Year", "id": "Year"},
+    {"name": "Genres", "id": "genres_display"},
+    {"name": "Language", "id": "language_display"},
+    {"name": "Runtime", "id": "runtime_display"},
     {"name": "Your rating", "id": "Rating"},
     {"name": "Predicted", "id": "pred"},
     {"name": "Error", "id": "err"},
 ]
 
 
+def _toolbar_item(label: str, component: Component, extra_class: str = "") -> html.Div:
+    return html.Div(
+        className=f"toolbar-item {extra_class}".strip(),
+        children=[html.Span(label, className="toolbar-label"), component],
+    )
+
+
 def layout() -> html.Div:
     """Build the overview page layout with filter controls and placeholders."""
     year_min, year_max = data.year_bounds()
 
-    filters = card(
-        [
-            html.Div(
-                className="filter-grid",
-                children=[
-                    control(
-                        "Genre",
-                        dcc.Dropdown(
-                            id="ov-genre",
-                            options=data.genre_options(),
-                            multi=True,
-                            placeholder="All genres",
-                        ),
-                    ),
-                    control(
-                        "Language",
-                        dcc.Dropdown(
-                            id="ov-lang",
-                            options=data.language_options(),
-                            multi=True,
-                            placeholder="All languages",
-                        ),
-                    ),
-                    control(
-                        "Year watched",
-                        dcc.RangeSlider(
-                            id="ov-years",
-                            min=year_min,
-                            max=year_max,
-                            step=1,
-                            value=[year_min, year_max],
-                            marks={year_min: str(year_min), year_max: str(year_max)},
-                            tooltip={"placement": "bottom"},
-                            allowCross=False,
-                        ),
-                    ),
-                    control(
-                        "Your rating",
-                        dcc.RangeSlider(
-                            id="ov-rating",
-                            min=0.5,
-                            max=5.0,
-                            step=0.5,
-                            value=[0.5, 5.0],
-                            marks={0.5: "0.5", 5: "5.0"},
-                            tooltip={"placement": "bottom"},
-                            allowCross=False,
-                        ),
-                    ),
-                ],
+    toolbar = html.Div(
+        className="toolbar",
+        children=[
+            _toolbar_item(
+                "Genre",
+                dcc.Dropdown(id="ov-genre", options=data.genre_options(), multi=True, placeholder="All"),
+                "toolbar-dd",
+            ),
+            _toolbar_item(
+                "Language",
+                dcc.Dropdown(id="ov-lang", options=data.language_options(), multi=True, placeholder="All"),
+                "toolbar-dd",
+            ),
+            _toolbar_item(
+                "Year watched",
+                dcc.RangeSlider(
+                    id="ov-years",
+                    min=year_min,
+                    max=year_max,
+                    step=1,
+                    value=[year_min, year_max],
+                    marks=None,
+                    tooltip={"placement": "bottom"},
+                    allowCross=False,
+                ),
+                "toolbar-slider",
+            ),
+            _toolbar_item(
+                "Your rating",
+                dcc.RangeSlider(
+                    id="ov-rating",
+                    min=0.5,
+                    max=5.0,
+                    step=0.5,
+                    value=[0.5, 5.0],
+                    marks=None,
+                    tooltip={"placement": "bottom"},
+                    allowCross=False,
+                ),
+                "toolbar-slider",
             ),
             html.Div(
-                className="filter-footer",
+                className="toolbar-meta",
                 children=[
                     html.Span(id="ov-count", className="filter-count"),
                     html.Span(id="ov-selected", className="filter-selected"),
@@ -87,11 +86,11 @@ def layout() -> html.Div:
     )
 
     return html.Div([
+        toolbar,
         page_header(
             "Model overview",
             "Ridge regression baseline evaluated on the most recent 20% of your Letterboxd ratings.",
         ),
-        filters,
         html.Div(id="ov-metrics"),
         html.Div(
             className="graph-grid-2",
@@ -102,31 +101,24 @@ def layout() -> html.Div:
         ),
         card([dcc.Graph(id="ov-mae", config={"displayModeBar": False})]),
         html.Div(
-            className="graph-grid-2",
             children=[
-                html.Div([
-                    section_title("Largest under-predictions"),
-                    card([data_table("ov-under", MISS_COLUMNS)]),
-                ]),
-                html.Div([
-                    section_title("Largest over-predictions"),
-                    card([data_table("ov-over", MISS_COLUMNS)]),
-                ]),
+                section_title("Holdout predictions"),
+                card([data_table("ov-table", MISS_COLUMNS, page_size=10, sortable=True)]),
             ],
         ),
     ])
 
 
-def _miss_records(df: pd.DataFrame, n: int = 10) -> tuple[list[dict], list[dict]]:
-    """Top-n under- and over-prediction rows formatted for the tables."""
+def _prediction_records(df: pd.DataFrame) -> list[dict]:
+    """All filtered holdout rows formatted for the table, worst misses first."""
     display = df[["Date", "Name", "Year", "Rating", "pred", "err"]].copy()
     display["Date"] = display["Date"].dt.date.astype(str)
+    display["genres_display"] = df["genres"].str.replace("|", ", ", regex=False)
+    display["language_display"] = df["original_language"].map(data.language_name)
+    display["runtime_display"] = df["runtime"].map(lambda r: f"{int(r)} min" if pd.notna(r) and r else "")
     display["pred"] = display["pred"].round(2)
     display["err"] = display["err"].round(2)
-
-    under = display.sort_values("err").head(n).to_dict("records")
-    over = display.sort_values("err", ascending=False).head(n).to_dict("records")
-    return under, over
+    return display.reindex(display["err"].abs().sort_values(ascending=False).index).to_dict("records")
 
 
 def _metric_cards(df: pd.DataFrame) -> html.Div:
@@ -189,10 +181,8 @@ def _highlight_styles(name: str | None) -> list[dict]:
     Output("ov-scatter", "figure"),
     Output("ov-hist", "figure"),
     Output("ov-mae", "figure"),
-    Output("ov-under", "data"),
-    Output("ov-over", "data"),
-    Output("ov-under", "style_data_conditional"),
-    Output("ov-over", "style_data_conditional"),
+    Output("ov-table", "data"),
+    Output("ov-table", "style_data_conditional"),
     Output("ov-count", "children"),
     Output("ov-selected", "children"),
     Input("ov-genre", "value"),
@@ -202,7 +192,7 @@ def _highlight_styles(name: str | None) -> list[dict]:
     Input("ov-scatter", "clickData"),
 )
 def update_overview(genres, languages, years, ratings, click_data):
-    """Re-render all overview charts and tables from the active filters."""
+    """Re-render all overview charts and the predictions table from the active filters."""
     holdout = data.holdout_films()
     df = data.filter_films(holdout, genres, languages, years, ratings)
 
@@ -210,32 +200,21 @@ def update_overview(genres, languages, years, ratings, click_data):
 
     if df.empty:
         empty = empty_figure()
-        return (
-            _metric_cards(df),
-            empty,
-            empty,
-            empty,
-            [],
-            [],
-            _highlight_styles(None),
-            _highlight_styles(None),
-            (count_text),
-            "",
-        )
+        return _metric_cards(df), empty, empty, empty, [], _highlight_styles(None), count_text, ""
 
     selected_name, selected_text = _selected_film(click_data, df)
-    under, over = _miss_records(df)
-    styles = _highlight_styles(selected_name)
 
     return (
         _metric_cards(df),
         predicted_vs_actual_figure(df),
         error_histogram_figure(df),
         mae_by_rating_figure(df),
-        under,
-        over,
-        styles,
-        styles,
+        _prediction_records(df),
+        _highlight_styles(selected_name),
         count_text,
         selected_text,
     )
+
+
+# Registered after layout is defined so dash.page_registry picks it up.
+dash.register_page(__name__, path="/", name="Overview", title="Film Recommendations — Overview", layout=layout)

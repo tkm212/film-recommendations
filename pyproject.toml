@@ -19,6 +19,7 @@ dependencies = [
     "numpy>=2.2.6",
     "pandas>=2.3.3",
     "plotly>=6.9.0",
+    "pycountry>=26.2.16",
     "python-dotenv>=1.2.1",
     "requests>=2.32.5",
     "scikit-learn>=1.7.2",

@@ -3,12 +3,11 @@
 import dash
 import pandas as pd
 from dash import Input, Output, State, callback, dcc, html
+from dash.development.base_component import Component
 
 from .. import data
-from ..components import card, chip, control, data_table, page_header
+from ..components import card, chip, data_table, page_header
 from ..theme import COLORS
-
-dash.register_page(__name__, path="/films", name="Films", title="Film Recommendations — Films")
 
 TABLE_COLUMNS = [
     {"name": "", "id": "poster", "presentation": "markdown"},
@@ -27,43 +26,51 @@ SPLIT_OPTIONS = [
 ]
 
 
+def _toolbar_item(label: str, component: Component, extra_class: str = "") -> html.Div:
+    return html.Div(
+        className=f"toolbar-item {extra_class}".strip(),
+        children=[html.Span(label, className="toolbar-label"), component],
+    )
+
+
 def layout() -> html.Div:
     """Build the films explorer layout."""
     films = data.get_films()
 
-    controls = card([
-        html.Div(
-            className="filter-grid",
-            children=[
-                control(
-                    "Search",
-                    dcc.Input(
-                        id="fx-search",
-                        type="text",
-                        placeholder="Search films, directors, actors…",
-                        debounce=True,
-                        className="search-input",
-                    ),
+    toolbar = html.Div(
+        className="toolbar",
+        children=[
+            _toolbar_item(
+                "Search",
+                dcc.Input(
+                    id="fx-search",
+                    type="text",
+                    placeholder="Films, directors, actors…",
+                    debounce=True,
+                    className="search-input",
                 ),
-                control(
-                    "Genre",
-                    dcc.Dropdown(id="fx-genre", options=data.genre_options(), multi=True, placeholder="All genres"),
-                ),
-                control(
-                    "Data split",
-                    dcc.Dropdown(id="fx-split", options=SPLIT_OPTIONS, value="all", clearable=False),
-                ),
-            ],
-        ),
-        html.Div(className="filter-footer", children=[html.Span(id="fx-count", className="filter-count")]),
-    ])
+                "toolbar-search",
+            ),
+            _toolbar_item(
+                "Genre",
+                dcc.Dropdown(id="fx-genre", options=data.genre_options(), multi=True, placeholder="All"),
+                "toolbar-dd",
+            ),
+            _toolbar_item(
+                "Data split",
+                dcc.Dropdown(id="fx-split", options=SPLIT_OPTIONS, value="all", clearable=False),
+                "toolbar-dd",
+            ),
+            html.Div(className="toolbar-meta", children=[html.Span(id="fx-count", className="filter-count")]),
+        ],
+    )
 
     return html.Div([
+        toolbar,
         page_header(
             "Film explorer",
             f"All {len(films)} rated films with the model's predictions. Click a row to see details.",
         ),
-        controls,
         html.Div(
             className="explorer-grid",
             children=[
@@ -143,7 +150,7 @@ def _detail_card(row: pd.Series) -> html.Div:
     if pd.notna(row.get("runtime")) and row["runtime"]:
         meta_bits.append(f"{int(row['runtime'])} min")
     if row.get("original_language"):
-        meta_bits.append(str(row["original_language"]).upper())
+        meta_bits.append(data.language_name(row["original_language"]))
     meta_bits.append(f"Watched {row['Date'].date()}")
 
     children: list = []
@@ -199,3 +206,7 @@ def update_detail(active_cell, viewport_rows):
         return _detail_placeholder()
 
     return _detail_card(matches.iloc[0])
+
+
+# Registered after layout is defined so dash.page_registry picks it up.
+dash.register_page(__name__, path="/films", name="Films", title="Film Recommendations — Films", layout=layout)
