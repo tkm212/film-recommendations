@@ -11,6 +11,7 @@ from sklearn.compose import ColumnTransformer
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.linear_model import Ridge
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+from sklearn.model_selection import KFold, cross_val_predict
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
@@ -19,6 +20,7 @@ from .constants import (
     DEFAULT_MODEL_PATH,
     DEFAULT_SNAP_STEP,
     DEFAULT_TEST_SIZE,
+    N_FOLDS,
     NUMERIC_FEATURES,
     RANDOM_STATE,
     RATING_CLIP_MAX,
@@ -118,22 +120,11 @@ def split_train_test(
     return X_train, y_train, X_test, y_test
 
 
-def fit_pipeline(
-    X_train: pd.DataFrame,
-    y_train: pd.Series,
-    save_path: str = DEFAULT_MODEL_PATH,
-) -> Pipeline:
-    """Fit a Ridge regression pipeline (preprocess + model) and save to disk.
-
-    Args:
-        X_train (pd.DataFrame): Training feature DataFrame (numeric,
-            categorical, text columns).
-        y_train (pd.Series): Training target Series (Rating).
-        save_path (str): Path to save the fitted pipeline with joblib.
-            Defaults to DEFAULT_MODEL_PATH.
+def build_pipeline() -> Pipeline:
+    """Build the (unfitted) Ridge regression pipeline (preprocess + model).
 
     Returns:
-        Pipeline: The fitted sklearn Pipeline (preprocess + Ridge).
+        Pipeline: An unfitted sklearn Pipeline (preprocess + Ridge).
     """
     text_overview = TfidfVectorizer(
         max_features=TFIDF_OVERVIEW_MAX_FEATURES,
@@ -185,11 +176,50 @@ def fit_pipeline(
 
     model = Ridge(alpha=RIDGE_ALPHA, random_state=RANDOM_STATE)
 
-    pipe = Pipeline(steps=[("preprocess", preprocess), ("model", model)])
+    return Pipeline(steps=[("preprocess", preprocess), ("model", model)])
 
+
+def fit_pipeline(
+    X_train: pd.DataFrame,
+    y_train: pd.Series,
+    save_path: str = DEFAULT_MODEL_PATH,
+) -> Pipeline:
+    """Fit a Ridge regression pipeline (preprocess + model) and save to disk.
+
+    Args:
+        X_train (pd.DataFrame): Training feature DataFrame (numeric,
+            categorical, text columns).
+        y_train (pd.Series): Training target Series (Rating).
+        save_path (str): Path to save the fitted pipeline with joblib.
+            Defaults to DEFAULT_MODEL_PATH.
+
+    Returns:
+        Pipeline: The fitted sklearn Pipeline (preprocess + Ridge).
+    """
+    pipe = build_pipeline()
     pipe.fit(X_train, y_train)
     joblib.dump(pipe, save_path)
     return pipe
+
+
+def cross_validate_predictions(X: pd.DataFrame, y: pd.Series, n_splits: int = N_FOLDS) -> np.ndarray:
+    """Out-of-fold predictions for every film via k-fold cross-validation.
+
+    Each film is predicted by a model that never saw it during training, so
+    all predictions are directly comparable.
+
+    Args:
+        X (pd.DataFrame): Feature DataFrame for all films.
+        y (pd.Series): Target ratings for all films.
+        n_splits (int): Number of CV folds. Defaults to N_FOLDS.
+
+    Returns:
+        np.ndarray: Out-of-fold predictions aligned with X, clipped to the
+        valid rating range.
+    """
+    cv = KFold(n_splits=n_splits, shuffle=True, random_state=RANDOM_STATE)
+    pred = cross_val_predict(build_pipeline(), X, y, cv=cv)
+    return np.clip(pred, RATING_CLIP_MIN, RATING_CLIP_MAX)
 
 
 def make_predictions(pipe: Pipeline, X_test: pd.DataFrame, y_test: pd.Series) -> tuple[pd.DataFrame, np.ndarray]:

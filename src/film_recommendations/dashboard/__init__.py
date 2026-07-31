@@ -23,7 +23,7 @@ def create_app(films_df: pd.DataFrame, title: str = "Film Recommendations") -> D
 
     Args:
         films_df (pd.DataFrame): All rated films with feature columns plus
-            pred, err and split ("train"/"test").
+            out-of-fold pred and err columns.
         title (str): Browser title. Defaults to "Film Recommendations".
 
     Returns:
