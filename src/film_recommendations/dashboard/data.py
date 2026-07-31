@@ -20,15 +20,13 @@ def set_films(films_df: pd.DataFrame) -> None:
 
     Args:
         films_df (pd.DataFrame): Feature table with Rating, pred, err and
-            (optionally) split and poster_path columns.
+            (optionally) a poster_path column.
     """
     global _films
     df = films_df.copy()
 
     if "poster_path" not in df.columns:
         df["poster_path"] = ""
-    if "split" not in df.columns:
-        df["split"] = "test"
 
     for col in _TEXT_COLUMNS:
         if col in df.columns:
@@ -48,12 +46,6 @@ def get_films() -> pd.DataFrame:
         msg = "Dashboard data not initialised; call set_films() first."
         raise RuntimeError(msg)
     return _films
-
-
-def holdout_films() -> pd.DataFrame:
-    """Return only the holdout (test split) films."""
-    df = get_films()
-    return df[df["split"] == "test"]
 
 
 def genre_options() -> list[str]:

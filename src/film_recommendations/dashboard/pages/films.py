@@ -19,12 +19,6 @@ TABLE_COLUMNS = [
     {"name": "Error", "id": "err"},
 ]
 
-SPLIT_OPTIONS = [
-    {"label": "All films", "value": "all"},
-    {"label": "Holdout only", "value": "test"},
-    {"label": "Training only", "value": "train"},
-]
-
 
 def _toolbar_item(label: str, component: Component, extra_class: str = "") -> html.Div:
     return html.Div(
@@ -56,11 +50,6 @@ def layout() -> html.Div:
                 dcc.Dropdown(id="fx-genre", options=data.genre_options(), multi=True, placeholder="All"),
                 "toolbar-dd",
             ),
-            _toolbar_item(
-                "Data split",
-                dcc.Dropdown(id="fx-split", options=SPLIT_OPTIONS, value="all", clearable=False),
-                "toolbar-dd",
-            ),
             html.Div(className="toolbar-meta", children=[html.Span(id="fx-count", className="filter-count")]),
         ],
     )
@@ -69,7 +58,7 @@ def layout() -> html.Div:
         toolbar,
         page_header(
             "Film explorer",
-            f"All {len(films)} rated films with the model's predictions. Click a row to see details.",
+            f"All {len(films)} rated films with out-of-fold predictions. Click a row to see details.",
         ),
         html.Div(
             className="explorer-grid",
@@ -111,15 +100,10 @@ def _table_records(df: pd.DataFrame) -> list[dict]:
     Output("fx-count", "children"),
     Input("fx-search", "value"),
     Input("fx-genre", "value"),
-    Input("fx-split", "value"),
 )
-def update_table(search, genres, split):
-    """Filter the explorer table by search text, genre, and data split."""
-    df = data.get_films()
-
-    if split and split != "all":
-        df = df[df["split"] == split]
-    df = data.filter_films(df, genres=genres)
+def update_table(search, genres):
+    """Filter the explorer table by search text and genre."""
+    df = data.filter_films(data.get_films(), genres=genres)
     if search:
         needle = search.strip().lower()
         mask = df["Name"].str.lower().str.contains(needle, regex=False)
@@ -158,7 +142,7 @@ def _detail_card(row: pd.Series) -> html.Div:
         children.append(html.Img(src=poster, className="detail-poster", alt=f"{row['Name']} poster"))
     children.extend([
         html.H3(f"{row['Name']} ({row['Year']})", className="detail-title"),
-        html.Div(className="detail-chips", children=[chip(g) for g in genres] + [chip(row["split"], "primary")]),
+        html.Div(className="detail-chips", children=[chip(g) for g in genres]),
         html.Div(" · ".join(meta_bits), className="detail-meta"),
         html.Div(
             className="detail-ratings",

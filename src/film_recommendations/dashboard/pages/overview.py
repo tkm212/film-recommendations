@@ -89,7 +89,8 @@ def layout() -> html.Div:
         toolbar,
         page_header(
             "Model overview",
-            "Ridge regression baseline evaluated on the most recent 20% of your Letterboxd ratings.",
+            "Ridge regression baseline evaluated with 3-fold cross-validation — "
+            "every rating below is an out-of-fold prediction, so all films are directly comparable.",
         ),
         html.Div(id="ov-metrics"),
         html.Div(
@@ -102,7 +103,7 @@ def layout() -> html.Div:
         card([dcc.Graph(id="ov-mae", config={"displayModeBar": False})]),
         html.Div(
             children=[
-                section_title("Holdout predictions"),
+                section_title("Out-of-fold predictions"),
                 card([data_table("ov-table", MISS_COLUMNS, page_size=10, sortable=True)]),
             ],
         ),
@@ -110,7 +111,7 @@ def layout() -> html.Div:
 
 
 def _prediction_records(df: pd.DataFrame) -> list[dict]:
-    """All filtered holdout rows formatted for the table, worst misses first."""
+    """All filtered rows formatted for the table, worst misses first."""
     display = df[["Date", "Name", "Year", "Rating", "pred", "err"]].copy()
     display["Date"] = display["Date"].dt.date.astype(str)
     display["genres_display"] = df["genres"].str.replace("|", ", ", regex=False)
@@ -122,7 +123,7 @@ def _prediction_records(df: pd.DataFrame) -> list[dict]:
 
 
 def _metric_cards(df: pd.DataFrame) -> html.Div:
-    """Metric card row for the filtered holdout set (placeholders if too small)."""
+    """Metric card row for the filtered films (placeholders if too small)."""
     if len(df) < 2:
         values = dict.fromkeys(("mae", "rmse", "r2", "spearman", "exact", "half"), "—")
     else:
@@ -193,10 +194,10 @@ def _highlight_styles(name: str | None) -> list[dict]:
 )
 def update_overview(genres, languages, years, ratings, click_data):
     """Re-render all overview charts and the predictions table from the active filters."""
-    holdout = data.holdout_films()
-    df = data.filter_films(holdout, genres, languages, years, ratings)
+    films = data.get_films()
+    df = data.filter_films(films, genres, languages, years, ratings)
 
-    count_text = f"Showing {len(df)} of {len(holdout)} holdout films"
+    count_text = f"Showing {len(df)} of {len(films)} films"
 
     if df.empty:
         empty = empty_figure()

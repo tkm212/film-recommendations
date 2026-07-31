@@ -54,13 +54,14 @@ def layout() -> html.Div:
         card([
             _item("Model", "Ridge regression over the combined sparse feature matrix (alpha = 2.0)."),
             _item(
-                "Split",
-                "Chronological: the most recent 20% of ratings are held out as the test set, "
-                "mimicking a realistic forecasting setting and avoiding leakage from future ratings.",
+                "Validation",
+                "3-fold cross-validation: every film's rating is predicted out-of-fold by a model "
+                "that never saw it during training, so all films get a directly comparable prediction. "
+                "The saved model is then refit on the full dataset.",
             ),
             _item(
                 "Metrics",
-                "MAE, RMSE and R² on the raw predictions (clipped to 0.5 to 5.0), Spearman rank "
+                "MAE, RMSE and R² on the out-of-fold predictions (clipped to 0.5 to 5.0), Spearman rank "
                 "correlation, and accuracy after snapping predictions to the nearest half star.",
             ),
         ]),

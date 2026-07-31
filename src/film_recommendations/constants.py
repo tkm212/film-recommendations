@@ -20,6 +20,7 @@ DEFAULT_MODEL_PATH = "./letterboxd_tmdb_rating_model.joblib"
 # --- Target / split ---
 TARGET_COLUMN = "Rating"
 DEFAULT_TEST_SIZE = 0.2
+N_FOLDS = 3
 
 # --- Feature columns ---
 TEXT_FEATURE_COLUMNS = [

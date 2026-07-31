@@ -12,20 +12,19 @@ import argparse
 import logging
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
+from sklearn.metrics import mean_absolute_error
 
 from film_recommendations.cleaning import clean_data
-from film_recommendations.constants import RATING_CLIP_MAX, RATING_CLIP_MIN
+from film_recommendations.constants import N_FOLDS, TARGET_COLUMN
 from film_recommendations.dashboard import create_app
 from film_recommendations.data_access import get_film_ratings
 from film_recommendations.feature_extraction import create_features
 from film_recommendations.ml_fitting import (
     create_transformed_features,
+    cross_validate_predictions,
     evaluate_rating_predictions,
     fit_pipeline,
-    make_predictions,
-    split_train_test,
 )
 
 logger = logging.getLogger(__name__)
@@ -71,42 +70,34 @@ def load_cached_features() -> pd.DataFrame:
 
 
 def train(features_df: pd.DataFrame) -> pd.DataFrame:
-    """Fit the model, evaluate on the holdout set, and save model + predictions.
+    """Evaluate with k-fold cross-validation and save the model + OOF predictions.
 
-    Predictions are generated for every film (train and test) so the dashboard
-    can explore the full collection; evaluation metrics use the test split only.
+    Every film gets an out-of-fold prediction (from a model that never saw it
+    during training), so all films are directly comparable. The saved pipeline
+    is then fit on the full dataset for future use.
 
     Args:
         features_df (pd.DataFrame): TMDB-enriched features DataFrame.
 
     Returns:
-        pd.DataFrame: All films with feature columns plus pred, err and split
-        ("train"/"test") columns.
+        pd.DataFrame: All films with feature columns plus pred and err columns.
     """
-    features_df, _ = create_transformed_features(features_df)
-    X_train, y_train, X_test, y_test = split_train_test(features_df)
+    features_df, y = create_transformed_features(features_df)
+    X = features_df.drop(columns=[TARGET_COLUMN])
+
+    oof_pred = cross_validate_predictions(X, y)
+    films_df = X.assign(Rating=y, pred=oof_pred, err=oof_pred - y)
+    results = evaluate_rating_predictions(y, oof_pred, films_df)
 
     MODEL_FILE.parent.mkdir(parents=True, exist_ok=True)
-    pipe = fit_pipeline(X_train, y_train, save_path=str(MODEL_FILE))
-    logger.info("Saved fitted pipeline to %s", MODEL_FILE)
-
-    eval_df, pred_clipped = make_predictions(pipe, X_test, y_test)
-    results = evaluate_rating_predictions(y_test, pred_clipped, eval_df)
-
-    films_df = pd.concat(
-        [
-            X_train.assign(Rating=y_train, split="train"),
-            X_test.assign(Rating=y_test, split="test"),
-        ],
-        ignore_index=True,
-    )
-    films_df["pred"] = np.clip(pipe.predict(films_df), RATING_CLIP_MIN, RATING_CLIP_MAX)
-    films_df["err"] = films_df["pred"] - films_df["Rating"]
+    fit_pipeline(X, y, save_path=str(MODEL_FILE))
+    logger.info("Saved pipeline (fit on all films) to %s", MODEL_FILE)
 
     FILMS_FILE.parent.mkdir(parents=True, exist_ok=True)
     films_df.to_csv(FILMS_FILE, index=False)
-    logger.info("Saved films with predictions to %s", FILMS_FILE)
+    logger.info("Saved films with OOF predictions to %s", FILMS_FILE)
 
+    logger.info("%d-fold CV MAE:                       %.3f", N_FOLDS, mean_absolute_error(y, oof_pred))
     logger.info("Exact match rate (nearest 0.5 star): %.1f%%", results["exact_match_rate"] * 100)
     logger.info("Within one snap step (0.5 star):     %.1f%%", results["within_half_star"] * 100)
     return films_df
