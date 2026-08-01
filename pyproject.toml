@@ -16,7 +16,8 @@ classifiers = [
 dependencies = [
     "dash>=4.4.1",
     "joblib>=1.5.3",
-    "numpy>=2.2.6",
+    "numpy>=1.26,<2; platform_machine == 'x86_64' and sys_platform == 'darwin'",
+    "numpy>=1.26; platform_machine != 'x86_64' or sys_platform != 'darwin'",
     "pandas>=2.3.3",
     "plotly>=6.9.0",
     "pycountry>=26.2.16",
@@ -24,6 +25,7 @@ dependencies = [
     "requests>=2.32.5",
     "scikit-learn>=1.7.2",
     "scipy>=1.15.3",
+    "sentence-transformers>=3.0,<4",
     "tqdm>=4.67.1",
 ]
 
@@ -114,4 +116,15 @@ preview = true
 known_first_party = ["film_recommendations"]
 
 [tool.deptry.per_rule_ignores]
-DEP002 = ["pandas", "python-dotenv"]
+DEP002 = ["pandas", "python-dotenv", "torch", "transformers"]
+
+[tool.uv]
+# sentence-transformers pulls torch; Intel Mac is capped at torch 2.2.2 → numpy 1.x.
+environments = [
+    "sys_platform == 'darwin' and platform_machine == 'arm64'",
+    "sys_platform == 'darwin' and platform_machine == 'x86_64'",
+    "sys_platform == 'linux'",
+]
+required-environments = [
+    "sys_platform == 'darwin' and platform_machine == 'x86_64'",
+]

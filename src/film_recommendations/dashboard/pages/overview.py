@@ -33,6 +33,14 @@ def _toolbar_item(label: str, component: Component, extra_class: str = "") -> ht
 def layout() -> html.Div:
     """Build the overview page layout with filter controls and placeholders."""
     year_min, year_max = data.year_bounds()
+    model_name = data.get_selected_model()
+    subtitle = (
+        f"Out-of-fold predictions from {model_name} (3-fold CV). "
+        "Every rating below was predicted by a model that never saw that film during training."
+        if model_name
+        else "Out-of-fold predictions from 3-fold cross-validation — "
+        "every rating below was predicted by a model that never saw that film during training."
+    )
 
     toolbar = html.Div(
         className="toolbar",
@@ -89,8 +97,7 @@ def layout() -> html.Div:
         toolbar,
         page_header(
             "Model overview",
-            "Ridge regression baseline evaluated with 3-fold cross-validation — "
-            "every rating below is an out-of-fold prediction, so all films are directly comparable.",
+            subtitle,
         ),
         html.Div(id="ov-metrics"),
         html.Div(

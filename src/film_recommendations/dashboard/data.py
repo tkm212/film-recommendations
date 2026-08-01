@@ -13,6 +13,8 @@ TMDB_IMAGE_BASE = "https://image.tmdb.org/t/p"
 _TEXT_COLUMNS = ("poster_path", "genres", "original_language", "overview", "keywords", "people_text")
 
 _films: pd.DataFrame | None = None
+_importance: dict[str, pd.DataFrame] | None = None
+_selected_model: str | None = None
 
 
 def set_films(films_df: pd.DataFrame) -> None:
@@ -46,6 +48,40 @@ def get_films() -> pd.DataFrame:
         msg = "Dashboard data not initialised; call set_films() first."
         raise RuntimeError(msg)
     return _films
+
+
+def set_importance(importance: dict[str, pd.DataFrame] | None) -> None:
+    """Register feature-importance tables for the Model analysis page."""
+    global _importance
+    _importance = importance
+
+
+def get_importance() -> dict[str, pd.DataFrame]:
+    """Return feature-importance tables.
+
+    Raises:
+        RuntimeError: If importance has not been registered.
+    """
+    if _importance is None:
+        msg = "Feature importance not available. Retrain with --train to analyse the saved model."
+        raise RuntimeError(msg)
+    return _importance
+
+
+def has_importance() -> bool:
+    """True when feature-importance tables are registered."""
+    return _importance is not None
+
+
+def set_selected_model(model_name: str | None) -> None:
+    """Register the name of the fitted model (shown on Overview)."""
+    global _selected_model
+    _selected_model = model_name
+
+
+def get_selected_model() -> str | None:
+    """Return the fitted model name, if registered."""
+    return _selected_model
 
 
 def genre_options() -> list[str]:

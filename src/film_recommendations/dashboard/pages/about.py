@@ -4,6 +4,14 @@ import dash
 from dash import html
 
 from ..components import card, page_header, section_title
+from ..data import get_films
+
+
+def _film_count_phrase() -> str:
+    try:
+        return f"On this {len(get_films())}-film dataset"
+    except RuntimeError:
+        return "On this dataset"
 
 
 def _item(term: str, description: str) -> html.Div:
@@ -47,17 +55,42 @@ def layout() -> html.Div:
             _item(
                 "Text",
                 "Plot overview, keywords, and director/cast names via TF-IDF; genres and "
-                "production countries tokenized on the pipe separator.",
+                "production countries tokenized on the pipe separator. Sentence embeddings "
+                "(all-MiniLM-L6-v2) capture semantic plot/people text and are PCA-reduced "
+                "before modeling.",
             ),
         ]),
         section_title("Model & evaluation"),
         card([
-            _item("Model", "Ridge regression over the combined sparse feature matrix (alpha = 2.0)."),
+            _item(
+                "Candidates",
+                "Ridge (metadata only), Ridge + TF-IDF, Ridge + sentence embeddings, "
+                "Ridge + TF-IDF + embeddings, and histogram gradient boosting on dense "
+                "SVD(TF-IDF) + PCA(embeddings). All use the same 3-fold out-of-fold protocol.",
+            ),
+            _item(
+                "Model selection",
+                "Run --train to benchmark every candidate. By default the lowest-MAE model is "
+                "fitted and saved; override with --model. View the benchmark table with "
+                "scripts/compare.py.",
+            ),
+            _item(
+                "Findings",
+                f"{_film_count_phrase()}, sparse TF-IDF text features outperform sentence "
+                "embeddings and gradient boosting — likely because taste correlates with specific "
+                "keywords and people, and sample size is small for dense text vectors.",
+            ),
             _item(
                 "Validation",
                 "3-fold cross-validation: every film's rating is predicted out-of-fold by a model "
                 "that never saw it during training, so all films get a directly comparable prediction. "
                 "The saved model is then refit on the full dataset.",
+            ),
+            _item(
+                "Feature importance",
+                "The Model page reports Ridge coefficient mass by feature group (numeric, language, "
+                "TF-IDF text blocks) and group-level permutation importance (MAE increase when a block "
+                "is shuffled), plus the strongest individual coefficients.",
             ),
             _item(
                 "Metrics",
