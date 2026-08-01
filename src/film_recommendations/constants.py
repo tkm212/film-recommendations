@@ -22,6 +22,12 @@ TARGET_COLUMN = "Rating"
 DEFAULT_TEST_SIZE = 0.2
 N_FOLDS = 3
 
+# --- Sentence embeddings ---
+EMBEDDING_MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
+EMBEDDING_DIM = 384
+EMBEDDING_PCA_COMPONENTS = 32
+EMBEDDING_CACHE_FILE = "text_embeddings_v2.csv"
+
 # --- Feature columns ---
 TEXT_FEATURE_COLUMNS = [
     "overview",
@@ -54,6 +60,7 @@ TFIDF_PIPE_MAX_FEATURES = 800
 TFIDF_NGRAM_RANGE = (1, 2)
 TFIDF_MIN_DF = 2
 RIDGE_ALPHA = 2.0
+HGB_SVD_COMPONENTS = 100
 RANDOM_STATE = 42
 SPARSE_THRESHOLD = 0.3
 

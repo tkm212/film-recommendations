@@ -2,7 +2,10 @@
 
 The public entry point is create_app, which takes the films-with-predictions
 DataFrame produced by the training pipeline and returns a ready-to-run Dash
-app with three pages: Overview (/), Films (/films) and About (/about).
+app with four pages: Overview (/), Films (/films), Model (/model) and About (/about).
+
+Cross-validated model benchmarks live in a separate comparison dashboard
+(scripts/compare.py → film_recommendations.comparison_dashboard.create_comparison_app).
 
 The building blocks (theme tokens, components, figures, data helpers) are
 importable individually for composing new dashboards:
@@ -18,18 +21,28 @@ from .components import navbar
 from .theme import FONT_FAMILY, FONT_URL
 
 
-def create_app(films_df: pd.DataFrame, title: str = "Film Recommendations") -> Dash:
+def create_app(
+    films_df: pd.DataFrame,
+    title: str = "Film Recommendations",
+    importance: dict[str, pd.DataFrame] | None = None,
+    selected_model: str | None = None,
+) -> Dash:
     """Create the multi-page dashboard app.
 
     Args:
         films_df (pd.DataFrame): All rated films with feature columns plus
             out-of-fold pred and err columns.
         title (str): Browser title. Defaults to "Film Recommendations".
+        importance (dict[str, pd.DataFrame] | None): Feature-importance tables
+            from analyze_model, for the Model page.
+        selected_model (str | None): Name of the fitted pipeline shown on Overview.
 
     Returns:
         Dash: The configured Dash application.
     """
     data.set_films(films_df)
+    data.set_importance(importance)
+    data.set_selected_model(selected_model)
 
     app = Dash(
         __name__,
@@ -41,7 +54,7 @@ def create_app(films_df: pd.DataFrame, title: str = "Film Recommendations") -> D
     )
 
     # Imported after app creation so dash.register_page can attach to this app.
-    from .pages import about, films, overview  # noqa: F401
+    from .pages import about, films, model, overview  # noqa: F401
 
     app.layout = html.Div(
         style={"fontFamily": FONT_FAMILY},

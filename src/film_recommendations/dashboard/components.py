@@ -5,7 +5,7 @@ from dash.development.base_component import Component
 
 from .theme import COLORS
 
-NAV_LINKS = [("Overview", "/"), ("Films", "/films"), ("About", "/about")]
+NAV_LINKS = [("Overview", "/"), ("Films", "/films"), ("Model", "/model"), ("About", "/about")]
 
 
 def navbar() -> html.Header:
@@ -110,7 +110,13 @@ ERR_COLOR_STYLES = [
 ]
 
 
-def data_table(table_id: str, columns: list[dict], page_size: int | None = None, sortable: bool = False):
+def data_table(
+    table_id: str,
+    columns: list[dict],
+    page_size: int | None = None,
+    sortable: bool = False,
+    data: list[dict] | None = None,
+):
     """Themed DataTable shell; rows are supplied by callbacks via the data prop.
 
     Args:
@@ -128,7 +134,7 @@ def data_table(table_id: str, columns: list[dict], page_size: int | None = None,
     return dash_table.DataTable(
         id=table_id,
         columns=columns,
-        data=[],
+        data=data if data is not None else [],
         sort_action="native" if sortable else "none",
         style_data_conditional=ERR_COLOR_STYLES,
         cell_selectable=True,
