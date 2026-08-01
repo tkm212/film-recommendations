@@ -34,14 +34,16 @@ class AdaptiveTruncatedSVD(BaseEstimator, TransformerMixin):
         self.random_state = random_state
         self.svd_: TruncatedSVD | None = None
 
-    def fit(self, X, y=None):  # noqa: ANN001, ANN201
+    def fit(self, X, y=None):
         n = min(self.n_components, max(X.shape[1] - 1, 1))
         self.svd_ = TruncatedSVD(n_components=n, random_state=self.random_state)
         self.svd_.fit(X)
         return self
 
-    def transform(self, X):  # noqa: ANN001, ANN201
-        assert self.svd_ is not None
+    def transform(self, X):
+        if self.svd_ is None:
+            msg = "AdaptiveTruncatedSVD has not been fitted yet."
+            raise RuntimeError(msg)
         return self.svd_.transform(X)
 
 
@@ -53,14 +55,16 @@ class AdaptivePCA(BaseEstimator, TransformerMixin):
         self.random_state = random_state
         self.pca_: PCA | None = None
 
-    def fit(self, X, y=None):  # noqa: ANN001, ANN201
+    def fit(self, X, y=None):
         n = min(self.n_components, X.shape[0], X.shape[1])
         self.pca_ = PCA(n_components=n, random_state=self.random_state)
         self.pca_.fit(X)
         return self
 
-    def transform(self, X):  # noqa: ANN001, ANN201
-        assert self.pca_ is not None
+    def transform(self, X):
+        if self.pca_ is None:
+            msg = "AdaptivePCA has not been fitted yet."
+            raise RuntimeError(msg)
         return self.pca_.transform(X)
 
 
@@ -115,7 +119,8 @@ def build_ridge_hybrid_pipeline(
     """Ridge on numeric, language, TF-IDF text, and PCA-compressed sentence embeddings."""
     emb_cols = emb_cols or embedding_column_names()
     base_preprocess = build_ridge_tfidf_pipeline().named_steps["preprocess"]
-    transformers = list(base_preprocess.transformers) + [
+    transformers = [
+        *base_preprocess.transformers,
         ("emb", _embedding_branch(n_pca), emb_cols),
     ]
     preprocess = ColumnTransformer(

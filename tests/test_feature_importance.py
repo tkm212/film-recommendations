@@ -18,7 +18,7 @@ from film_recommendations.ml_fitting import create_transformed_features, fit_pip
 
 @pytest.fixture
 def fitted_model(sample_features_df: pd.DataFrame, tmp_path: Path):
-    data, y = create_transformed_features(sample_features_df)
+    data, _y = create_transformed_features(sample_features_df)
     X_train, y_train, _, _ = split_train_test(data)
     with patch("film_recommendations.ml_fitting.joblib.dump"):
         pipe = fit_pipeline(X_train, y_train, save_path=str(tmp_path / "m.joblib"))

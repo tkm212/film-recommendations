@@ -55,7 +55,9 @@ def layout() -> html.Div:
             className="graph-grid-2",
             children=[
                 card([dcc.Graph(id="md-group-coef", figure=group_coefficient_figure(importance["groups"]))]),
-                card([dcc.Graph(id="md-group-perm", figure=group_permutation_figure(importance["permutation_groups"]))]),
+                card([
+                    dcc.Graph(id="md-group-perm", figure=group_permutation_figure(importance["permutation_groups"]))
+                ]),
             ],
         ),
         card([

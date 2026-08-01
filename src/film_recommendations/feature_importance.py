@@ -157,11 +157,7 @@ def permutation_group_importance(
             "importance_std": float(np.std(scores)),
         })
 
-    return (
-        pd.DataFrame(rows)
-        .sort_values("importance_mean", ascending=False)
-        .reset_index(drop=True)
-    )
+    return pd.DataFrame(rows).sort_values("importance_mean", ascending=False).reset_index(drop=True)
 
 
 def analyze_model(pipe: Pipeline, X: pd.DataFrame, y: pd.Series) -> dict[str, pd.DataFrame] | None:
