@@ -21,12 +21,22 @@ import pandas as pd
 from sklearn.metrics import mean_absolute_error
 
 from film_recommendations.cleaning import clean_data
-from film_recommendations.constants import EMBEDDING_CACHE_FILE, N_FOLDS, TARGET_COLUMN
+from film_recommendations.constants import (
+    DEFAULT_N_CLUSTERS,
+    EMBEDDING_CACHE_FILE,
+    N_FOLDS,
+    RATED_UMAP_CACHE_FILE,
+    TARGET_COLUMN,
+    WATCHED_EMBEDDING_CACHE_FILE,
+    WATCHED_UMAP_CACHE_FILE,
+)
 from film_recommendations.dashboard import create_app
+from film_recommendations.dashboard import data as dashboard_data
 from film_recommendations.data_access import get_film_ratings
 from film_recommendations.embeddings import add_merged_text, attach_embeddings, embedding_column_names
 from film_recommendations.feature_extraction import create_features
 from film_recommendations.feature_importance import analyze_model
+from film_recommendations.film_taste_space import attach_taste_coordinates, load_embedding_matrix
 from film_recommendations.ml_fitting import (
     create_transformed_features,
     evaluate_rating_predictions,
@@ -38,18 +48,23 @@ from film_recommendations.model_comparison import (
     resolve_model_name,
 )
 from film_recommendations.model_specs import MODEL_BUILDERS
+from film_recommendations.watch_history import dedupe_watches, load_watch_history
 
 logger = logging.getLogger(__name__)
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 RATINGS_FILE = REPO_ROOT / "inputs" / "ratings.csv"
 FEATURES_FILE = REPO_ROOT / "outputs" / "ratings_with_tmdb_features.csv"
+WATCHED_FEATURES_FILE = REPO_ROOT / "outputs" / "watched_with_tmdb_features.csv"
 MODEL_FILE = REPO_ROOT / "models" / "letterboxd_tmdb_rating_model.joblib"
 FILMS_FILE = REPO_ROOT / "outputs" / "films_with_predictions.csv"
 IMPORTANCE_DIR = REPO_ROOT / "outputs" / "feature_importance"
 COMPARISON_FILE = REPO_ROOT / "outputs" / "model_comparison.csv"
 SELECTED_MODEL_FILE = REPO_ROOT / "outputs" / "selected_model.txt"
 EMBEDDING_CACHE = REPO_ROOT / "outputs" / EMBEDDING_CACHE_FILE
+WATCHED_EMBEDDING_CACHE = REPO_ROOT / "outputs" / WATCHED_EMBEDDING_CACHE_FILE
+WATCHED_UMAP_CACHE = REPO_ROOT / "outputs" / WATCHED_UMAP_CACHE_FILE
+RATED_UMAP_CACHE = REPO_ROOT / "outputs" / RATED_UMAP_CACHE_FILE
 
 
 def ingest_features() -> pd.DataFrame:
@@ -68,6 +83,32 @@ def ingest_features() -> pd.DataFrame:
         FEATURES_FILE,
     )
     return features_df
+
+
+def ingest_watched_features() -> pd.DataFrame:
+    """TMDB-enrich all watched films (diary if present) and cache embeddings for the taste map."""
+    watched = dedupe_watches(load_watch_history(REPO_ROOT))
+    features_df, missing = create_features(watched)
+
+    WATCHED_FEATURES_FILE.parent.mkdir(parents=True, exist_ok=True)
+    features_df.to_csv(WATCHED_FEATURES_FILE, index=False)
+    attach_embeddings(features_df, WATCHED_EMBEDDING_CACHE)
+
+    logger.info(
+        "Enriched %d / %d watched films (%d not on TMDB); cached to %s",
+        len(features_df),
+        len(watched),
+        len(missing),
+        WATCHED_FEATURES_FILE,
+    )
+    return features_df
+
+
+def ingest_all() -> pd.DataFrame:
+    """Ingest rated films for training and full watch history for the taste map."""
+    rated = ingest_features()
+    ingest_watched_features()
+    return rated
 
 
 def load_cached_features() -> pd.DataFrame:
@@ -213,6 +254,80 @@ def load_importance_for_dashboard() -> dict[str, pd.DataFrame] | None:
     return importance
 
 
+def attach_taste_map(films_df: pd.DataFrame, embedding_cache: Path) -> pd.DataFrame:
+    """Add PCA coordinates and default clusters when embedding cache matches film rows."""
+    try:
+        embeddings = load_embedding_matrix(embedding_cache)
+    except (FileNotFoundError, ValueError) as exc:
+        logger.warning("Skipping taste map: %s", exc)
+        dashboard_data.set_pca_explained(None)
+        return films_df
+    if len(embeddings) != len(films_df):
+        logger.warning(
+            "Skipping taste map: embedding cache has %d rows, films have %d",
+            len(embeddings),
+            len(films_df),
+        )
+        dashboard_data.set_pca_explained(None)
+        return films_df
+    films_with_taste, explained = attach_taste_coordinates(
+        films_df,
+        embeddings,
+        umap_cache_path=_umap_cache_for(embedding_cache),
+        n_clusters=DEFAULT_N_CLUSTERS,
+    )
+    dashboard_data.set_pca_explained(explained)
+    dashboard_data.set_taste_embeddings(embeddings)
+    return films_with_taste
+
+
+def _umap_cache_for(embedding_cache: Path) -> Path:
+    if embedding_cache.name == WATCHED_EMBEDDING_CACHE_FILE:
+        return WATCHED_UMAP_CACHE
+    return RATED_UMAP_CACHE
+
+
+def _join_predictions(features_df: pd.DataFrame, predictions_df: pd.DataFrame) -> pd.DataFrame:
+    """Attach model predictions to watched films where the title was rated."""
+    pred_cols = ["Name", "Year", "pred", "err"]
+    available = [c for c in pred_cols if c in predictions_df.columns]
+    preds = predictions_df[available].drop_duplicates(subset=["Name", "Year"], keep="last")
+    merged = features_df.merge(preds, on=["Name", "Year"], how="left")
+    if "err" not in merged.columns:
+        merged["err"] = float("nan")
+    if "pred" not in merged.columns:
+        merged["pred"] = float("nan")
+    return merged
+
+
+def prepare_taste_map(predictions_df: pd.DataFrame) -> pd.DataFrame | None:
+    """Build taste-map coordinates for all watched films when embeddings are available."""
+    expected_n = len(dedupe_watches(load_watch_history(REPO_ROOT)))
+
+    if WATCHED_FEATURES_FILE.exists():
+        watched_df = pd.read_csv(WATCHED_FEATURES_FILE, parse_dates=["Date"])
+        watched_df = _join_predictions(watched_df, predictions_df)
+        cache_path = WATCHED_EMBEDDING_CACHE
+    elif FEATURES_FILE.exists():
+        rated_features = load_cached_features()
+        if expected_n > len(rated_features):
+            logger.warning(
+                "Watch history has %d unique films but only %d are cached. "
+                "Run with --ingest to refresh TMDB features for the taste map.",
+                expected_n,
+                len(rated_features),
+            )
+            return None
+        watched_df = _join_predictions(rated_features, predictions_df)
+        cache_path = EMBEDDING_CACHE
+    else:
+        logger.warning("No TMDB feature cache found; run with --ingest first.")
+        return None
+
+    enriched = attach_taste_map(watched_df, cache_path)
+    return enriched if "pc1" in enriched.columns else None
+
+
 def load_saved_predictions() -> pd.DataFrame:
     """Load the last saved films-with-predictions table.
 
@@ -256,7 +371,7 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 
     if args.ingest:
-        films_df, importance, _comparison, selected = train(ingest_features(), model_name=args.model)
+        films_df, importance, _comparison, selected = train(ingest_all(), model_name=args.model)
     elif args.train:
         films_df, importance, _comparison, selected = train(load_cached_features(), model_name=args.model)
     else:
@@ -264,7 +379,14 @@ def main() -> None:
         importance = load_importance_for_dashboard()
         selected = load_selected_model()
 
-    app = create_app(films_df, importance=importance, selected_model=selected)
+    taste_films = prepare_taste_map(films_df)
+
+    app = create_app(
+        films_df,
+        taste_films=taste_films,
+        importance=importance,
+        selected_model=selected,
+    )
     app.run(host="127.0.0.1", port=args.port, debug=False)
 
 

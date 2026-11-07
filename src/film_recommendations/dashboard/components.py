@@ -5,7 +5,13 @@ from dash.development.base_component import Component
 
 from .theme import COLORS
 
-NAV_LINKS = [("Overview", "/"), ("Films", "/films"), ("Model", "/model"), ("About", "/about")]
+NAV_LINKS = [
+    ("Overview", "/"),
+    ("Films", "/films"),
+    ("Taste map", "/taste"),
+    ("Model", "/model"),
+    ("About", "/about"),
+]
 
 
 def navbar() -> html.Header:
