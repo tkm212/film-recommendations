@@ -33,8 +33,8 @@ def layout() -> html.Div:
         card([
             _item(
                 "Source",
-                "Letterboxd exports: ratings.csv for star ratings and modeling; "
-                "optional diary.csv for every film you have logged as watched (rated or not).",
+                "Letterboxd exports: ratings.csv for modeling; diary.csv, watched.csv for your films. "
+                "Taste-map background: a TMDB discover catalog (Letterboxd does not publish all films).",
             ),
             _item(
                 "Enrichment",

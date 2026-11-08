@@ -177,21 +177,82 @@ def group_permutation_figure(perm_df: pd.DataFrame) -> go.Figure:
     return fig
 
 
+def _split_taste_map_layers(
+    map_df: pd.DataFrame, highlight_df: pd.DataFrame | None
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Background universe vs highlighted library points."""
+    has_background = "in_library" in map_df.columns and (~map_df["in_library"]).any()
+    background = map_df[~map_df["in_library"]] if has_background else pd.DataFrame()
+    if highlight_df is not None:
+        return background, highlight_df
+    if has_background:
+        return background, map_df[map_df["in_library"]]
+    return pd.DataFrame(), map_df
+
+
+def _add_taste_background(
+    fig: go.Figure,
+    background: pd.DataFrame,
+    x_col: str,
+    y_col: str,
+    z_col: str,
+    *,
+    dimensions: int,
+) -> None:
+    if background.empty:
+        return
+    custom = background[["Name", "Year", "tmdb_id"]].to_numpy()
+    hover = background["Name"].astype(str) + " (" + background["Year"].astype(str) + ")"
+    marker = {"size": 4 if dimensions == 3 else 5, "color": COLORS["text_secondary"], "opacity": 0.2}
+    if dimensions == 2:
+        fig.add_trace(
+            go.Scatter(
+                x=background[x_col],
+                y=background[y_col],
+                mode="markers",
+                name="TMDB reference catalog",
+                marker=marker,
+                customdata=custom,
+                text=hover,
+                hovertemplate="%{text}<extra>not in diary filter</extra>",
+            )
+        )
+        return
+    fig.add_trace(
+        go.Scatter3d(
+            x=background[x_col],
+            y=background[y_col],
+            z=background[z_col],
+            mode="markers",
+            name="TMDB reference catalog",
+            marker=marker,
+            customdata=custom,
+            text=hover,
+            hovertemplate="%{text}<extra>not in diary filter</extra>",
+        )
+    )
+
+
 def taste_map_figure(
     films_df: pd.DataFrame,
     projection: str = "pca",
     dimensions: int = 3,
     explained_variance: tuple[float, float, float] | None = None,
     color_by: str = "cluster",
+    highlight_df: pd.DataFrame | None = None,
 ) -> go.Figure:
-    """2D or 3D scatter in PCA or UMAP space with configurable color encoding."""
+    """2D or 3D scatter: full universe faded in the back, library subset colored."""
     from ..film_taste_space import projection_columns
 
     x_col, y_col, z_col = projection_columns(projection)
     if films_df.empty or x_col not in films_df.columns:
         return empty_figure("Taste map unavailable — run training to compute embeddings")
 
-    plot_df = films_df.copy()
+    background, foreground = _split_taste_map_layers(films_df, highlight_df)
+    if foreground.empty:
+        return empty_figure("No films match the current filters")
+
+    plot_df = foreground.copy()
     if "err" not in plot_df.columns:
         plot_df["err"] = float("nan")
     if "pred" not in plot_df.columns:
@@ -247,8 +308,9 @@ def taste_map_figure(
             **color_args,
         )
         fig.update_traces(marker={"size": 8, "opacity": 0.85, "line": {"width": 0.5, "color": "#ffffff"}})
+        _add_taste_background(fig, background, x_col, y_col, z_col, dimensions=2)
         fig.update_layout(
-            title=f"{proj_label} {dim_label} taste map (colored by {title_suffix})",
+            title=f"{proj_label} {dim_label} taste map — your library on {len(films_df):,} films ({title_suffix})",
             xaxis_title=labels[x_col],
             yaxis_title=labels[y_col],
         )
@@ -269,8 +331,9 @@ def taste_map_figure(
         **color_args,
     )
     fig.update_traces(marker={"size": 5, "opacity": 0.88, "line": {"width": 0.5, "color": "#ffffff"}})
+    _add_taste_background(fig, background, x_col, y_col, z_col, dimensions=3)
     fig.update_layout(
-        title=f"{proj_label} {dim_label} taste map (colored by {title_suffix})",
+        title=f"{proj_label} {dim_label} taste map — your library on {len(films_df):,} films ({title_suffix})",
         scene={
             "xaxis_title": labels[x_col],
             "yaxis_title": labels[y_col],

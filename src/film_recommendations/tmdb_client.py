@@ -113,6 +113,25 @@ def tmdb_search_movie(title: str, year: int | None = None) -> dict[str, Any] | N
     return best
 
 
+def tmdb_discover_movies(
+    page: int = 1,
+    *,
+    sort_by: str = "popularity.desc",
+    vote_count_gte: int = 50,
+    include_adult: bool = False,
+) -> dict[str, Any]:
+    """Paginated TMDB discover results (broad movie catalog proxy for taste-map background)."""
+    params: dict[str, Any] = {
+        "api_key": get_tmdb_api_key(),
+        "page": page,
+        "sort_by": sort_by,
+        "vote_count.gte": vote_count_gte,
+        "include_adult": str(include_adult).lower(),
+    }
+    cache_key = f"discover__p{page}__{sort_by}__vc{vote_count_gte}"
+    return cached_get(f"{TMDB_BASE}/discover/movie", params=params, cache_key=cache_key)
+
+
 def tmdb_movie_details(movie_id: int) -> dict[str, Any]:
     """Fetch full TMDB movie details including credits and keywords.
 

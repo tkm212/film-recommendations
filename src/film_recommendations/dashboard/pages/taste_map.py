@@ -96,7 +96,8 @@ def layout() -> html.Div:
             card([
                 html.P(
                     "PCA/UMAP and clustering need cached embeddings from ingest or train. "
-                    "Add inputs/diary.csv for all watches, then run uv run python scripts/main.py --ingest.",
+                    "Run uv run python scripts/main.py --ingest to build the TMDB catalog and map your "
+                    "Letterboxd exports (diary / ratings / watched.csv).",
                     style={"color": COLORS["text_secondary"], "margin": 0},
                 ),
             ]),
@@ -188,7 +189,8 @@ def layout() -> html.Div:
     return html.Div([
         page_header(
             "Taste map",
-            "Explore watches in embedding space: PCA or UMAP, 2D or 3D, with clusters, timeline, and neighbors.",
+            "Background: thousands of TMDB films (Letterboxd has no public catalog). "
+            "Your Letterboxd exports are highlighted. Clusters and timeline use your library subset.",
         ),
         filter_toolbar,
         map_toolbar,
@@ -228,8 +230,9 @@ def _filtered_df(
     n_clusters: int,
     projection: str,
 ) -> pd.DataFrame:
-    df = data.films_with_clusters(n_clusters, projection=projection)
-    return data.filter_films(df, genres=genres, languages=languages, year_range=years, rating_range=ratings)
+    library = data.library_films()
+    filtered = data.filter_films(library, genres=genres, languages=languages, year_range=years, rating_range=ratings)
+    return data.films_with_clusters(n_clusters, projection=projection, subset=filtered)
 
 
 def _click_selection(click_data: dict | None) -> tuple[str | None, int | float | None, str]:
@@ -278,11 +281,14 @@ def update_taste_map(
     n_clusters = n_clusters or 6
     projection = projection or "pca"
     dimensions = int(dimensions or 3)
-    all_watched = data.get_taste_films()
+    universe = data.get_taste_films()
+    library = data.library_films()
     df = _filtered_df(genres, languages, years, ratings, n_clusters, projection)
 
-    rated_n = int(pd.to_numeric(all_watched["Rating"], errors="coerce").notna().sum())
-    count = f"Showing {len(df)} of {len(all_watched)} watched films ({rated_n} rated)"
+    rated_n = int(pd.to_numeric(library["Rating"], errors="coerce").notna().sum())
+    count = f"Highlighting {len(df)} of {len(library)} library films ({rated_n} rated)"
+    if "in_library" in universe.columns and (~universe["in_library"]).any():
+        count += f" · {len(universe):,} films on map"
 
     if df.empty:
         empty = empty_figure()
@@ -290,11 +296,12 @@ def update_taste_map(
 
     explained = data.get_pca_explained() if projection == "pca" else None
     fig = taste_map_figure(
-        df,
+        universe,
         projection=projection,
         dimensions=dimensions,
         explained_variance=explained,
         color_by=color_by or "cluster",
+        highlight_df=df,
     )
     timeline = taste_timeline_figure(df)
     summary_df = cluster_summary(df)
@@ -304,7 +311,7 @@ def update_taste_map(
     neighbors: list[dict] = []
     embeddings = data.get_taste_embeddings()
     if name and year is not None and embeddings is not None:
-        nn = nearest_neighbor_films(all_watched, embeddings, name, year, k=8)
+        nn = nearest_neighbor_films(universe, embeddings, name, year, k=8)
         if not nn.empty:
             nn = nn.copy()
             nn["Rating"] = pd.to_numeric(nn["Rating"], errors="coerce").map(

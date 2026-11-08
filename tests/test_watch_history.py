@@ -6,7 +6,13 @@ import pandas as pd
 import pytest
 
 from film_recommendations.cleaning import clean_watched_data
-from film_recommendations.watch_history import dedupe_watches, load_watch_history, merge_letterboxd_ratings
+from film_recommendations.film_universe import merge_catalog_with_personal
+from film_recommendations.watch_history import (
+    dedupe_watches,
+    load_watch_history,
+    merge_letterboxd_ratings,
+    tag_library_membership,
+)
 
 
 class TestCleanWatched:
@@ -62,6 +68,24 @@ class TestWatchHistory:
     def test_missing_inputs_raises(self, tmp_path) -> None:
         with pytest.raises(FileNotFoundError):
             load_watch_history(tmp_path)
+
+
+class TestLibraryTagging:
+    def test_tag_library_on_catalog_plus_personal(self) -> None:
+        catalog = pd.DataFrame({
+            "Name": ["In Diary", "Catalog Only"],
+            "Year": [2018, 2000],
+            "tmdb_id": [1, 2],
+        })
+        library = pd.DataFrame({
+            "Name": ["In Diary"],
+            "Year": [2018],
+            "Date": pd.to_datetime(["2020-01-01"]),
+        })
+        universe = merge_catalog_with_personal(catalog, library)
+        tagged = tag_library_membership(universe, library)
+        assert tagged["in_library"].sum() == 1
+        assert bool(tagged.loc[tagged["Name"] == "In Diary", "in_library"].iloc[0])
 
 
 class TestMergeRatings:
