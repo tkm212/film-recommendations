@@ -27,6 +27,8 @@ from film_recommendations.constants import (
     N_FOLDS,
     RATED_UMAP_CACHE_FILE,
     TARGET_COLUMN,
+    UNIVERSE_EMBEDDING_CACHE_FILE,
+    UNIVERSE_UMAP_CACHE_FILE,
     WATCHED_EMBEDDING_CACHE_FILE,
     WATCHED_UMAP_CACHE_FILE,
 )
@@ -48,7 +50,12 @@ from film_recommendations.model_comparison import (
     resolve_model_name,
 )
 from film_recommendations.model_specs import MODEL_BUILDERS
-from film_recommendations.watch_history import dedupe_watches, load_watch_history
+from film_recommendations.watch_history import (
+    expected_universe_count,
+    load_film_universe,
+    load_my_films,
+    tag_library_membership,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +63,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 RATINGS_FILE = REPO_ROOT / "inputs" / "ratings.csv"
 FEATURES_FILE = REPO_ROOT / "outputs" / "ratings_with_tmdb_features.csv"
 WATCHED_FEATURES_FILE = REPO_ROOT / "outputs" / "watched_with_tmdb_features.csv"
+UNIVERSE_FEATURES_FILE = REPO_ROOT / "outputs" / "universe_with_tmdb_features.csv"
 MODEL_FILE = REPO_ROOT / "models" / "letterboxd_tmdb_rating_model.joblib"
 FILMS_FILE = REPO_ROOT / "outputs" / "films_with_predictions.csv"
 IMPORTANCE_DIR = REPO_ROOT / "outputs" / "feature_importance"
@@ -64,6 +72,8 @@ SELECTED_MODEL_FILE = REPO_ROOT / "outputs" / "selected_model.txt"
 EMBEDDING_CACHE = REPO_ROOT / "outputs" / EMBEDDING_CACHE_FILE
 WATCHED_EMBEDDING_CACHE = REPO_ROOT / "outputs" / WATCHED_EMBEDDING_CACHE_FILE
 WATCHED_UMAP_CACHE = REPO_ROOT / "outputs" / WATCHED_UMAP_CACHE_FILE
+UNIVERSE_EMBEDDING_CACHE = REPO_ROOT / "outputs" / UNIVERSE_EMBEDDING_CACHE_FILE
+UNIVERSE_UMAP_CACHE = REPO_ROOT / "outputs" / UNIVERSE_UMAP_CACHE_FILE
 RATED_UMAP_CACHE = REPO_ROOT / "outputs" / RATED_UMAP_CACHE_FILE
 
 
@@ -85,29 +95,34 @@ def ingest_features() -> pd.DataFrame:
     return features_df
 
 
-def ingest_watched_features() -> pd.DataFrame:
-    """TMDB-enrich all watched films (diary if present) and cache embeddings for the taste map."""
-    watched = dedupe_watches(load_watch_history(REPO_ROOT))
-    features_df, missing = create_features(watched)
+def ingest_universe_features() -> pd.DataFrame:
+    """TMDB-enrich the full Letterboxd watched list (or library fallback) for the taste-map universe."""
+    universe = load_film_universe(REPO_ROOT)
+    features_df, missing = create_features(universe)
 
-    WATCHED_FEATURES_FILE.parent.mkdir(parents=True, exist_ok=True)
-    features_df.to_csv(WATCHED_FEATURES_FILE, index=False)
-    attach_embeddings(features_df, WATCHED_EMBEDDING_CACHE)
+    UNIVERSE_FEATURES_FILE.parent.mkdir(parents=True, exist_ok=True)
+    features_df.to_csv(UNIVERSE_FEATURES_FILE, index=False)
+    attach_embeddings(features_df, UNIVERSE_EMBEDDING_CACHE)
 
     logger.info(
-        "Enriched %d / %d watched films (%d not on TMDB); cached to %s",
+        "Enriched %d / %d universe films (%d not on TMDB); cached to %s",
         len(features_df),
-        len(watched),
+        len(universe),
         len(missing),
-        WATCHED_FEATURES_FILE,
+        UNIVERSE_FEATURES_FILE,
     )
     return features_df
+
+
+def ingest_watched_features() -> pd.DataFrame:
+    """Backward-compatible alias for universe ingest."""
+    return ingest_universe_features()
 
 
 def ingest_all() -> pd.DataFrame:
     """Ingest rated films for training and full watch history for the taste map."""
     rated = ingest_features()
-    ingest_watched_features()
+    ingest_universe_features()
     return rated
 
 
@@ -282,6 +297,8 @@ def attach_taste_map(films_df: pd.DataFrame, embedding_cache: Path) -> pd.DataFr
 
 
 def _umap_cache_for(embedding_cache: Path) -> Path:
+    if embedding_cache.name == UNIVERSE_EMBEDDING_CACHE_FILE:
+        return UNIVERSE_UMAP_CACHE
     if embedding_cache.name == WATCHED_EMBEDDING_CACHE_FILE:
         return WATCHED_UMAP_CACHE
     return RATED_UMAP_CACHE
@@ -301,30 +318,40 @@ def _join_predictions(features_df: pd.DataFrame, predictions_df: pd.DataFrame) -
 
 
 def prepare_taste_map(predictions_df: pd.DataFrame) -> pd.DataFrame | None:
-    """Build taste-map coordinates for all watched films when embeddings are available."""
-    expected_n = len(dedupe_watches(load_watch_history(REPO_ROOT)))
+    """Build taste-map coordinates for the film universe; tag diary/library subset."""
+    expected_n = expected_universe_count(REPO_ROOT)
+    library = load_my_films(REPO_ROOT)
 
-    if WATCHED_FEATURES_FILE.exists():
-        watched_df = pd.read_csv(WATCHED_FEATURES_FILE, parse_dates=["Date"])
-        watched_df = _join_predictions(watched_df, predictions_df)
+    if UNIVERSE_FEATURES_FILE.exists():
+        universe_df = pd.read_csv(UNIVERSE_FEATURES_FILE, parse_dates=["Date"])
+        universe_df = _join_predictions(universe_df, predictions_df)
+        universe_df = tag_library_membership(universe_df, library)
+        cache_path = UNIVERSE_EMBEDDING_CACHE
+    elif WATCHED_FEATURES_FILE.exists():
+        universe_df = pd.read_csv(WATCHED_FEATURES_FILE, parse_dates=["Date"])
+        universe_df = _join_predictions(universe_df, predictions_df)
+        universe_df = tag_library_membership(universe_df, library)
         cache_path = WATCHED_EMBEDDING_CACHE
     elif FEATURES_FILE.exists():
         rated_features = load_cached_features()
         if expected_n > len(rated_features):
             logger.warning(
-                "Watch history has %d unique films but only %d are cached. "
+                "Film universe has %d unique titles but only %d are cached. "
                 "Run with --ingest to refresh TMDB features for the taste map.",
                 expected_n,
                 len(rated_features),
             )
             return None
-        watched_df = _join_predictions(rated_features, predictions_df)
+        universe_df = tag_library_membership(_join_predictions(rated_features, predictions_df), library)
         cache_path = EMBEDDING_CACHE
     else:
         logger.warning("No TMDB feature cache found; run with --ingest first.")
         return None
 
-    enriched = attach_taste_map(watched_df, cache_path)
+    if "in_library" not in universe_df.columns:
+        universe_df["in_library"] = True
+
+    enriched = attach_taste_map(universe_df, cache_path)
     return enriched if "pc1" in enriched.columns else None
 
 

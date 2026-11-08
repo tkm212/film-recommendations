@@ -36,7 +36,7 @@ def create_app(
         importance (dict[str, pd.DataFrame] | None): Feature-importance tables
             from analyze_model, for the Model page.
         selected_model (str | None): Name of the fitted pipeline shown on Overview.
-        taste_films (pd.DataFrame | None): All watched films for the Taste map page.
+        taste_films (pd.DataFrame | None): Full taste-map universe (watched.csv) with in_library flag.
 
     Returns:
         Dash: The configured Dash application.

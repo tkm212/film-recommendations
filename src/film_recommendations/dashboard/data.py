@@ -105,7 +105,7 @@ def get_pca_explained() -> tuple[float, float, float] | None:
 
 
 def set_taste_films(films_df: pd.DataFrame | None) -> None:
-    """Register films for the Taste map (all watched titles, rating optional)."""
+    """Register the taste-map universe (full watched list) and optional library flag."""
     global _taste_films
     if films_df is None:
         _taste_films = None
@@ -121,6 +121,10 @@ def set_taste_films(films_df: pd.DataFrame | None) -> None:
         df["pred"] = float("nan")
     if "err" not in df.columns:
         df["err"] = float("nan")
+    if "in_library" not in df.columns:
+        df["in_library"] = True
+    else:
+        df["in_library"] = df["in_library"].fillna(False).astype(bool)
     _taste_films = df
 
 
@@ -148,11 +152,23 @@ def get_taste_embeddings() -> np.ndarray | None:
     return _taste_embeddings
 
 
-def films_with_clusters(n_clusters: int, projection: str = "pca") -> pd.DataFrame:
+def library_films() -> pd.DataFrame:
+    """Rows flagged as the user's library subset on the taste map."""
+    df = get_taste_films()
+    if "in_library" in df.columns:
+        return df[df["in_library"]].copy()
+    return df.copy()
+
+
+def films_with_clusters(
+    n_clusters: int,
+    projection: str = "pca",
+    subset: pd.DataFrame | None = None,
+) -> pd.DataFrame:
     """Return films with KMeans labels recomputed in the active projection."""
     from ..film_taste_space import cluster_coordinates, projection_columns
 
-    df = get_taste_films().copy()
+    df = (subset if subset is not None else get_taste_films()).copy()
     if not has_taste_space():
         return df
     x_col, y_col, z_col = projection_columns(projection)
@@ -167,9 +183,9 @@ def films_with_clusters(n_clusters: int, projection: str = "pca") -> pd.DataFram
 
 
 def taste_genre_options() -> list[str]:
-    """Sorted unique genres across all watched films on the taste map."""
+    """Sorted unique genres across library films on the taste map."""
     genres: set[str] = set()
-    for value in get_taste_films()["genres"]:
+    for value in library_films()["genres"]:
         genres.update(g for g in str(value).split("|") if g)
     return sorted(genres)
 
@@ -207,14 +223,14 @@ def language_options() -> list[dict]:
 
 
 def taste_year_bounds() -> tuple[int, int]:
-    """(min, max) year watched for the taste map."""
-    years = get_taste_films()["Date"].dt.year
+    """(min, max) year watched for library films on the taste map."""
+    years = library_films()["Date"].dt.year
     return int(years.min()), int(years.max())
 
 
 def taste_language_options() -> list[dict]:
-    """Language dropdown options for watched films on the taste map."""
-    codes = {lang for lang in get_taste_films()["original_language"] if lang}
+    """Language dropdown options for library films on the taste map."""
+    codes = {lang for lang in library_films()["original_language"] if lang}
     return sorted(
         ({"label": language_name(code), "value": code} for code in codes),
         key=lambda option: option["label"],

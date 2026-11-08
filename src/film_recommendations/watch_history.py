@@ -1,4 +1,4 @@
-"""Load Letterboxd watch history (diary + optional ratings merge)."""
+"""Load Letterboxd watch history (watched list, diary, ratings)."""
 
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ from .cleaning import clean_data, clean_watched_data
 
 DIARY_FILENAME = "diary.csv"
 RATINGS_FILENAME = "ratings.csv"
+WATCHED_FILENAME = "watched.csv"
 
 
 def _inputs_dir(repo_root: Path) -> Path:
@@ -38,18 +39,29 @@ def dedupe_watches(watched: pd.DataFrame) -> pd.DataFrame:
     return watched.sort_values("Date").drop_duplicates(subset=["Name", "Year"], keep="last").reset_index(drop=True)
 
 
-def load_watch_history(repo_root: Path) -> pd.DataFrame:
-    """Load all watched films: diary export if present, otherwise ratings export.
+def _film_keys(df: pd.DataFrame) -> set[tuple[str, int]]:
+    years = pd.to_numeric(df["Year"], errors="coerce")
+    keys: set[tuple[str, int]] = set()
+    for name, year in zip(df["Name"], years, strict=True):
+        if pd.notna(year):
+            keys.add((str(name), int(year)))
+    return keys
 
-    Args:
-        repo_root (Path): Repository root (contains inputs/).
 
-    Returns:
-        pd.DataFrame: Watched films with Date, Name, Year; Rating when known.
+def tag_library_membership(universe: pd.DataFrame, library: pd.DataFrame) -> pd.DataFrame:
+    """Mark rows that belong to the user's active library (diary / ratings export)."""
+    keys = _film_keys(library)
+    out = universe.copy()
+    years = pd.to_numeric(out["Year"], errors="coerce")
+    out["in_library"] = [
+        (str(name), int(year)) in keys if pd.notna(year) else False
+        for name, year in zip(out["Name"], years, strict=True)
+    ]
+    return out
 
-    Raises:
-        FileNotFoundError: If neither diary nor ratings CSV exists.
-    """
+
+def load_my_films(repo_root: Path) -> pd.DataFrame:
+    """Films in diary (+ ratings merge) or ratings-only — your curated watch log."""
     inputs = _inputs_dir(repo_root)
     diary_path = inputs / DIARY_FILENAME
     ratings_path = inputs / RATINGS_FILENAME
@@ -67,6 +79,31 @@ def load_watch_history(repo_root: Path) -> pd.DataFrame:
     raise FileNotFoundError(msg)
 
 
+def load_film_universe(repo_root: Path) -> pd.DataFrame:
+    """All films for the taste-map background (Letterboxd watched.csv when present)."""
+    inputs = _inputs_dir(repo_root)
+    watched_path = inputs / WATCHED_FILENAME
+    ratings_path = inputs / RATINGS_FILENAME
+
+    if watched_path.exists():
+        universe = clean_watched_data(pd.read_csv(watched_path))
+        if ratings_path.exists():
+            universe = merge_letterboxd_ratings(universe, pd.read_csv(ratings_path))
+        return dedupe_watches(universe)
+
+    return dedupe_watches(load_my_films(repo_root))
+
+
+def load_watch_history(repo_root: Path) -> pd.DataFrame:
+    """Backward-compatible alias for load_my_films."""
+    return load_my_films(repo_root)
+
+
+def expected_universe_count(repo_root: Path) -> int:
+    """Unique films in the current universe export (watched.csv or fallback)."""
+    return len(load_film_universe(repo_root))
+
+
 def expected_watched_count(repo_root: Path) -> int:
-    """Number of unique films in the current watch-history export."""
-    return len(dedupe_watches(load_watch_history(repo_root)))
+    """Number of unique films in the library export."""
+    return len(dedupe_watches(load_my_films(repo_root)))

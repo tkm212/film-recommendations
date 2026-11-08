@@ -34,7 +34,8 @@ def layout() -> html.Div:
             _item(
                 "Source",
                 "Letterboxd exports: ratings.csv for star ratings and modeling; "
-                "optional diary.csv for every film you have logged as watched (rated or not).",
+                "watched.csv for your full watched list (taste-map background); "
+                "diary.csv for the library subset highlighted on the map.",
             ),
             _item(
                 "Enrichment",

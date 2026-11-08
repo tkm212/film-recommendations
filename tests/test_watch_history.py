@@ -6,7 +6,14 @@ import pandas as pd
 import pytest
 
 from film_recommendations.cleaning import clean_watched_data
-from film_recommendations.watch_history import dedupe_watches, load_watch_history, merge_letterboxd_ratings
+from film_recommendations.watch_history import (
+    dedupe_watches,
+    load_film_universe,
+    load_my_films,
+    load_watch_history,
+    merge_letterboxd_ratings,
+    tag_library_membership,
+)
 
 
 class TestCleanWatched:
@@ -62,6 +69,48 @@ class TestWatchHistory:
     def test_missing_inputs_raises(self, tmp_path) -> None:
         with pytest.raises(FileNotFoundError):
             load_watch_history(tmp_path)
+
+
+class TestUniverseAndLibrary:
+    def test_watched_csv_universe_with_diary_library(self, tmp_path) -> None:
+        inputs = tmp_path / "inputs"
+        inputs.mkdir()
+        pd.DataFrame({
+            "Date": ["2020-01-01", "2019-01-01"],
+            "Name": ["In Diary", "Only Watched"],
+            "Year": [2018, 2017],
+        }).to_csv(inputs / "watched.csv", index=False)
+        pd.DataFrame({
+            "Date": ["2020-01-01"],
+            "Name": ["In Diary"],
+            "Year": [2018],
+        }).to_csv(inputs / "diary.csv", index=False)
+
+        universe = load_film_universe(tmp_path)
+        library = load_my_films(tmp_path)
+        tagged = tag_library_membership(universe, library)
+
+        assert len(universe) == 2
+        assert len(library) == 1
+        assert tagged["in_library"].sum() == 1
+        assert bool(tagged.loc[tagged["Name"] == "In Diary", "in_library"].iloc[0])
+
+    def test_no_watched_csv_uses_library_as_universe(self, tmp_path) -> None:
+        inputs = tmp_path / "inputs"
+        inputs.mkdir()
+        pd.DataFrame({
+            "Date": ["2020-01-01"],
+            "Name": ["Film A"],
+            "Year": [2019],
+            "Rating": [4],
+        }).to_csv(inputs / "ratings.csv", index=False)
+
+        universe = load_film_universe(tmp_path)
+        library = load_my_films(tmp_path)
+        tagged = tag_library_membership(universe, library)
+
+        assert len(universe) == len(library) == 1
+        assert tagged["in_library"].all()
 
 
 class TestMergeRatings:

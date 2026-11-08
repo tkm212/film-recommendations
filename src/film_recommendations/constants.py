@@ -29,6 +29,8 @@ EMBEDDING_PCA_COMPONENTS = 32
 EMBEDDING_CACHE_FILE = "text_embeddings_v2.csv"
 WATCHED_EMBEDDING_CACHE_FILE = "text_embeddings_watched.csv"
 WATCHED_UMAP_CACHE_FILE = "watched_umap_coords.csv"
+UNIVERSE_EMBEDDING_CACHE_FILE = "text_embeddings_universe.csv"
+UNIVERSE_UMAP_CACHE_FILE = "universe_umap_coords.csv"
 RATED_UMAP_CACHE_FILE = "text_umap_coords_v2.csv"
 DEFAULT_N_CLUSTERS = 6
 
