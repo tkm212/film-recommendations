@@ -2,20 +2,20 @@
 
 import dash
 import pandas as pd
-from dash import Input, Output, State, callback, dcc, html
+from dash import Input, Output, callback, dcc, html
 from dash.development.base_component import Component
 
-from .. import data
-from ..components import card, data_table, page_header, section_title
-from ..figures import empty_figure, taste_map_figure, taste_timeline_figure
-from ..film_detail import detail_placeholder, film_detail_card, resolve_film_row
-from ..theme import COLORS
 from ...film_taste_space import (
     cluster_insights,
     cluster_summary,
     nearest_neighbor_films,
     nonlinear_projection_label,
 )
+from .. import data
+from ..components import card, data_table, page_header, section_title
+from ..figures import empty_figure, taste_map_figure, taste_timeline_figure
+from ..film_detail import detail_placeholder, film_detail_card, resolve_film_row
+from ..theme import COLORS
 
 COLOR_BY_OPTIONS = [
     {"label": "Cluster", "value": "cluster"},

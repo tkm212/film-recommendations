@@ -69,7 +69,9 @@ class TestNeighborsAndInsights:
     def test_nearest_neighbors(self, sample_features_df: pd.DataFrame, sample_embeddings: np.ndarray, tmp_path) -> None:
         n = len(sample_features_df)
         emb = sample_embeddings[:n]
-        films, _ = attach_taste_coordinates(sample_features_df.assign(Rating=4.0), emb, tmp_path / "u.csv", n_clusters=3)
+        films, _ = attach_taste_coordinates(
+            sample_features_df.assign(Rating=4.0), emb, tmp_path / "u.csv", n_clusters=3
+        )
         query = films.iloc[0]
         nn = nearest_neighbor_films(films, emb, query["Name"], query["Year"], k=3)
         assert len(nn) == 3
@@ -78,9 +80,8 @@ class TestNeighborsAndInsights:
     def test_cluster_insights(self, sample_features_df: pd.DataFrame, sample_embeddings: np.ndarray, tmp_path) -> None:
         n = len(sample_features_df)
         emb = sample_embeddings[:n]
-        people = (
-            ["Christopher Nolan|Leonardo DiCaprio"] * (n // 2)
-            + ["Denis Villeneuve|Timothée Chalamet"] * (n - n // 2)
+        people = ["Christopher Nolan|Leonardo DiCaprio"] * (n // 2) + ["Denis Villeneuve|Timothée Chalamet"] * (
+            n - n // 2
         )
         films, _ = attach_taste_coordinates(
             sample_features_df.assign(Rating=4.0, keywords="noir crime", people_text=people),

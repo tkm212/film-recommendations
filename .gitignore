@@ -139,6 +139,7 @@ celerybeat.pid
 
 # Trained model artifacts
 models/*.joblib
+outputs/selected_model.txt
 
 # Environments
 .env

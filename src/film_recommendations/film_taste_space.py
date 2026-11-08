@@ -241,10 +241,7 @@ def _top_people(texts: pd.Series, limit: int = 5) -> list[str]:
         s = str(raw).strip()
         if not s:
             continue
-        if "|" in s:
-            names = [n.strip() for n in s.split("|") if n.strip()]
-        else:
-            names = [s]
+        names = [n.strip() for n in s.split("|") if n.strip()] if "|" in s else [s]
         for name in names:
             counter[name] += 1
     return [name for name, _ in counter.most_common(limit)]
