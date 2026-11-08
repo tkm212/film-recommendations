@@ -8,8 +8,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from .constants import DEFAULT_UNIVERSE_MAX_FILMS, UNIVERSE_CATALOG_FILE, UNIVERSE_MIN_VOTE_COUNT
 from .cleaning import clean_data, clean_watched_data
+from .constants import DEFAULT_UNIVERSE_MAX_FILMS, UNIVERSE_CATALOG_FILE, UNIVERSE_MIN_VOTE_COUNT
 from .tmdb_client import tmdb_discover_movies
 from .watch_history import (
     DIARY_FILENAME,
