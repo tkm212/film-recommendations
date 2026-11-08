@@ -26,21 +26,23 @@ def create_app(
     title: str = "Film Recommendations",
     importance: dict[str, pd.DataFrame] | None = None,
     selected_model: str | None = None,
+    taste_films: pd.DataFrame | None = None,
 ) -> Dash:
     """Create the multi-page dashboard app.
 
     Args:
-        films_df (pd.DataFrame): All rated films with feature columns plus
-            out-of-fold pred and err columns.
+        films_df (pd.DataFrame): Rated films with out-of-fold pred and err columns.
         title (str): Browser title. Defaults to "Film Recommendations".
         importance (dict[str, pd.DataFrame] | None): Feature-importance tables
             from analyze_model, for the Model page.
         selected_model (str | None): Name of the fitted pipeline shown on Overview.
+        taste_films (pd.DataFrame | None): All watched films for the Taste map page.
 
     Returns:
         Dash: The configured Dash application.
     """
     data.set_films(films_df)
+    data.set_taste_films(taste_films)
     data.set_importance(importance)
     data.set_selected_model(selected_model)
 
@@ -54,7 +56,7 @@ def create_app(
     )
 
     # Imported after app creation so dash.register_page can attach to this app.
-    from .pages import about, films, model, overview  # noqa: F401
+    from .pages import about, films, model, overview, taste_map  # noqa: F401
 
     app.layout = html.Div(
         style={"fontFamily": FONT_FAMILY},

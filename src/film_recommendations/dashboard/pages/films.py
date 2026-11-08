@@ -6,8 +6,8 @@ from dash import Input, Output, State, callback, dcc, html
 from dash.development.base_component import Component
 
 from .. import data
-from ..components import card, chip, data_table, page_header
-from ..theme import COLORS
+from ..components import card, data_table, page_header
+from ..film_detail import detail_placeholder, film_detail_card, resolve_film_row
 
 TABLE_COLUMNS = [
     {"name": "", "id": "poster", "presentation": "markdown"},
@@ -64,16 +64,10 @@ def layout() -> html.Div:
             className="explorer-grid",
             children=[
                 card([data_table("fx-table", TABLE_COLUMNS, page_size=10, sortable=True)]),
-                html.Div(id="fx-detail", children=_detail_placeholder()),
+                html.Div(id="fx-detail", children=detail_placeholder("Select a film in the table to see its details.")),
             ],
         ),
     ])
-
-
-def _detail_placeholder() -> html.Div:
-    return card(
-        [html.Div("Select a film in the table to see its details.", className="detail-placeholder")],
-    )
 
 
 def _table_records(df: pd.DataFrame) -> list[dict]:
@@ -115,60 +109,6 @@ def update_table(search, genres):
     return _table_records(df), None, count_text
 
 
-def _rating_block(label: str, value: str) -> html.Div:
-    return html.Div(
-        className="detail-rating",
-        children=[html.Div(label, className="metric-label"), html.Div(value, className="detail-rating-value")],
-    )
-
-
-def _detail_card(row: pd.Series) -> html.Div:
-    """Full detail card for one film row."""
-    poster = data.poster_url(row["poster_path"], "w342")
-    err = row["err"]
-    err_color = COLORS["danger"] if err > 0 else COLORS["success"]
-    verdict = "model over-predicted" if err > 0 else "model under-predicted"
-    genres = [g for g in row["genres"].split("|") if g]
-
-    meta_bits = []
-    if pd.notna(row.get("runtime")) and row["runtime"]:
-        meta_bits.append(f"{int(row['runtime'])} min")
-    if row.get("original_language"):
-        meta_bits.append(data.language_name(row["original_language"]))
-    meta_bits.append(f"Watched {row['Date'].date()}")
-
-    children: list = []
-    if poster:
-        children.append(html.Img(src=poster, className="detail-poster", alt=f"{row['Name']} poster"))
-    children.extend([
-        html.H3(f"{row['Name']} ({row['Year']})", className="detail-title"),
-        html.Div(className="detail-chips", children=[chip(g) for g in genres]),
-        html.Div(" · ".join(meta_bits), className="detail-meta"),
-        html.Div(
-            className="detail-ratings",
-            children=[
-                _rating_block("Your rating", f"{row['Rating']:.1f}"),
-                _rating_block("Predicted", f"{row['pred']:.2f}"),
-            ],
-        ),
-        html.Div(f"{err:+.2f} — {verdict}", className="detail-err", style={"color": err_color}),
-    ])
-
-    if row.get("overview"):
-        children.append(html.P(row["overview"], className="detail-overview"))
-    if row.get("people_text"):
-        children.extend([
-            html.Div("Director & cast", className="metric-label"),
-            html.P(row["people_text"], className="detail-people"),
-        ])
-
-    uri = row.get("Letterboxd URI", "")
-    if isinstance(uri, str) and uri.startswith("http"):
-        children.append(html.A("View on Letterboxd", href=uri, target="_blank", className="detail-link"))
-
-    return card(children)
-
-
 @callback(
     Output("fx-detail", "children"),
     Input("fx-table", "active_cell"),
@@ -177,19 +117,18 @@ def _detail_card(row: pd.Series) -> html.Div:
 def update_detail(active_cell, viewport_rows):
     """Show the detail panel for the clicked table row."""
     if not active_cell or not viewport_rows:
-        return _detail_placeholder()
+        return detail_placeholder("Select a film in the table to see its details.")
 
     row_idx = active_cell.get("row")
     if row_idx is None or row_idx >= len(viewport_rows):
-        return _detail_placeholder()
+        return detail_placeholder("Select a film in the table to see its details.")
 
-    tmdb_id = viewport_rows[row_idx].get("tmdb_id")
-    films = data.get_films()
-    matches = films[films["tmdb_id"] == tmdb_id]
-    if matches.empty:
-        return _detail_placeholder()
+    row = viewport_rows[row_idx]
+    film = resolve_film_row(data.get_films(), row["Name"], row["Year"], row.get("tmdb_id"))
+    if film is None:
+        return detail_placeholder("Select a film in the table to see its details.")
 
-    return _detail_card(matches.iloc[0])
+    return film_detail_card(film)
 
 
 # Registered after layout is defined so dash.page_registry picks it up.

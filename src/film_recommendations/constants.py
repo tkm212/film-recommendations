@@ -27,6 +27,10 @@ EMBEDDING_MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
 EMBEDDING_DIM = 384
 EMBEDDING_PCA_COMPONENTS = 32
 EMBEDDING_CACHE_FILE = "text_embeddings_v2.csv"
+WATCHED_EMBEDDING_CACHE_FILE = "text_embeddings_watched.csv"
+WATCHED_UMAP_CACHE_FILE = "watched_umap_coords.csv"
+RATED_UMAP_CACHE_FILE = "text_umap_coords_v2.csv"
+DEFAULT_N_CLUSTERS = 6
 
 # --- Feature columns ---
 TEXT_FEATURE_COLUMNS = [

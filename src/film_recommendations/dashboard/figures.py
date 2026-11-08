@@ -5,9 +5,28 @@ import plotly.express as px
 import plotly.graph_objects as go
 
 from ..constants import RATING_CLIP_MAX, RATING_CLIP_MIN
-from .theme import COLORS, PLOT_TEMPLATE
+from .theme import CHART_COLORWAY, COLORS, PLOT_TEMPLATE
 
 FIGURE_HEIGHT = 380
+
+
+def _taste_color_encoding(color_by: str) -> tuple[str, dict, str]:
+    """Return color column, plotly color kwargs, and title fragment."""
+    if color_by == "rating":
+        return (
+            "Rating",
+            {"color_continuous_scale": "Viridis", "range_color": [RATING_CLIP_MIN, RATING_CLIP_MAX]},
+            "your rating",
+        )
+    if color_by == "pred":
+        return (
+            "pred",
+            {"color_continuous_scale": "Viridis", "range_color": [RATING_CLIP_MIN, RATING_CLIP_MAX]},
+            "model prediction",
+        )
+    if color_by == "residual":
+        return "err", {"color_continuous_scale": "RdBu_r", "color_continuous_midpoint": 0}, "prediction residual"
+    return "cluster_label", {"color_discrete_sequence": CHART_COLORWAY}, "KMeans clusters"
 
 
 def empty_figure(message: str = "No films match the current filters") -> go.Figure:
@@ -156,6 +175,146 @@ def group_permutation_figure(perm_df: pd.DataFrame) -> go.Figure:
     )
     fig.update_traces(marker={"cornerradius": 4})
     return fig
+
+
+def taste_map_figure(
+    films_df: pd.DataFrame,
+    projection: str = "pca",
+    dimensions: int = 3,
+    explained_variance: tuple[float, float, float] | None = None,
+    color_by: str = "cluster",
+) -> go.Figure:
+    """2D or 3D scatter in PCA or UMAP space with configurable color encoding."""
+    from ..film_taste_space import projection_columns
+
+    x_col, y_col, z_col = projection_columns(projection)
+    if films_df.empty or x_col not in films_df.columns:
+        return empty_figure("Taste map unavailable — run training to compute embeddings")
+
+    plot_df = films_df.copy()
+    if "err" not in plot_df.columns:
+        plot_df["err"] = float("nan")
+    if "pred" not in plot_df.columns:
+        plot_df["pred"] = float("nan")
+    if "tmdb_id" not in plot_df.columns:
+        plot_df["tmdb_id"] = None
+
+    proj_label = "PCA" if projection == "pca" else "UMAP"
+    labels = {
+        x_col: f"{proj_label} 1",
+        y_col: f"{proj_label} 2",
+        z_col: f"{proj_label} 3",
+        "Rating": "Your rating",
+        "pred": "Predicted",
+        "err": "Residual (pred - rating)",
+        "cluster_label": "Cluster",
+        "Name": "Film",
+        "Year": "Year",
+        "genres": "Genres",
+    }
+    if projection == "pca" and explained_variance:
+        labels[x_col] = f"PC 1 ({explained_variance[0]:.0%} var.)"
+        labels[y_col] = f"PC 2 ({explained_variance[1]:.0%} var.)"
+        if dimensions == 3:
+            labels[z_col] = f"PC 3 ({explained_variance[2]:.0%} var.)"
+
+    color_field, color_args, title_suffix = _taste_color_encoding(color_by)
+    dim_label = "2D" if dimensions == 2 else "3D"
+    hover = {
+        "Year": True,
+        "Rating": ":.1f",
+        "pred": ":.1f",
+        "err": ":.2f",
+        "genres": True,
+        x_col: False,
+        y_col: False,
+        z_col: False,
+        "tmdb_id": False,
+    }
+
+    if dimensions == 2:
+        fig = px.scatter(
+            plot_df,
+            x=x_col,
+            y=y_col,
+            color=color_field,
+            custom_data=["Name", "Year", "tmdb_id"],
+            hover_name="Name",
+            hover_data=hover,
+            labels=labels,
+            template=PLOT_TEMPLATE,
+            height=520,
+            **color_args,
+        )
+        fig.update_traces(marker={"size": 8, "opacity": 0.85, "line": {"width": 0.5, "color": "#ffffff"}})
+        fig.update_layout(
+            title=f"{proj_label} {dim_label} taste map (colored by {title_suffix})",
+            xaxis_title=labels[x_col],
+            yaxis_title=labels[y_col],
+        )
+        return fig
+
+    fig = px.scatter_3d(
+        plot_df,
+        x=x_col,
+        y=y_col,
+        z=z_col,
+        color=color_field,
+        custom_data=["Name", "Year", "tmdb_id"],
+        hover_name="Name",
+        hover_data=hover,
+        labels=labels,
+        template=PLOT_TEMPLATE,
+        height=520,
+        **color_args,
+    )
+    fig.update_traces(marker={"size": 5, "opacity": 0.88, "line": {"width": 0.5, "color": "#ffffff"}})
+    fig.update_layout(
+        title=f"{proj_label} {dim_label} taste map (colored by {title_suffix})",
+        scene={
+            "xaxis_title": labels[x_col],
+            "yaxis_title": labels[y_col],
+            "zaxis_title": labels[z_col],
+        },
+    )
+    return fig
+
+
+def taste_timeline_figure(films_df: pd.DataFrame) -> go.Figure:
+    """Stacked bar chart of watches per year, colored by cluster."""
+    if films_df.empty or "cluster_label" not in films_df.columns:
+        return empty_figure("No timeline data")
+    plot_df = films_df.copy()
+    plot_df["year_watched"] = pd.to_datetime(plot_df["Date"]).dt.year
+    counts = plot_df.groupby(["year_watched", "cluster_label"], observed=True).size().to_frame("films").reset_index()
+    fig = px.bar(
+        counts,
+        x="year_watched",
+        y="films",
+        color="cluster_label",
+        labels={"year_watched": "Year watched", "films": "Films", "cluster_label": "Cluster"},
+        title="Watch history by year and cluster",
+        template=PLOT_TEMPLATE,
+        height=FIGURE_HEIGHT,
+        color_discrete_sequence=CHART_COLORWAY,
+    )
+    fig.update_traces(marker={"cornerradius": 2})
+    return fig
+
+
+def taste_map_3d_figure(
+    films_df: pd.DataFrame,
+    explained_variance: tuple[float, float, float] | None = None,
+    color_by: str = "cluster",
+) -> go.Figure:
+    """Backward-compatible alias for PCA 3D taste map."""
+    return taste_map_figure(
+        films_df,
+        projection="pca",
+        dimensions=3,
+        explained_variance=explained_variance,
+        color_by=color_by,
+    )
 
 
 def top_coefficients_figure(coef_df: pd.DataFrame, n: int = 20, group: str | None = None) -> go.Figure:

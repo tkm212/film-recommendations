@@ -76,8 +76,9 @@ def extract_features_from_tmdb(details: dict[str, Any]) -> dict[str, Any]:
 
     top_cast = [p.get("name") for p in cast[:TOP_CAST_COUNT] if p.get("name")]
 
-    # Combine “people” into a text field so TF-IDF can learn patterns
-    people_text = " ".join([director, *top_cast]).strip()
+    # Pipe-separated names for display/cluster stats; TF-IDF still tokenizes inside names
+    people_names = [n for n in [director, *top_cast] if n]
+    people_text = "|".join(people_names)
 
     return {
         "tmdb_id": details.get("id"),
@@ -136,12 +137,15 @@ def create_features(df: pd.DataFrame) -> tuple[pd.DataFrame, list[tuple[str, int
         details = tmdb_movie_details(movie_id)
         feats = extract_features_from_tmdb(details)
 
+        rating_raw = r["Rating"] if "Rating" in r.index else None
+        rating = safe_float(rating_raw) if rating_raw is not None and not pd.isna(rating_raw) else float("nan")
+
         out = {
             "Date": r["Date"],
             "Name": title,
             "Year": year,
             "Letterboxd URI": r.get("Letterboxd URI", ""),
-            "Rating": float(r["Rating"]),
+            "Rating": rating,
             **feats,
         }
         rows.append(out)

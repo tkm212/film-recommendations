@@ -497,3 +497,55 @@ body {
     gap: 4px;
   }
 }
+
+/* Taste map cluster cards */
+.cluster-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 16px;
+}
+
+.cluster-card {
+  border: 1px solid #e8eaed;
+  border-radius: 10px;
+  padding: 14px;
+  background: #fafafa;
+}
+
+.cluster-card-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #202124;
+  margin-bottom: 6px;
+}
+
+.cluster-card-meta {
+  font-size: 12px;
+  color: #5f6368;
+  margin-bottom: 10px;
+}
+
+.cluster-card-keywords {
+  font-size: 12px;
+  color: #3c4043;
+  margin-bottom: 12px;
+  line-height: 1.5;
+}
+
+.cluster-poster-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.cluster-poster-thumb {
+  width: 56px;
+  border-radius: 6px;
+  box-shadow: 0 1px 4px rgba(60, 64, 67, 0.2);
+}
+
+.taste-side-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}

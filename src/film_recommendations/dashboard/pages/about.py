@@ -31,7 +31,11 @@ def layout() -> html.Div:
         ),
         section_title("Data"),
         card([
-            _item("Source", "A raw Letterboxd ratings export (date watched, film, year, star rating)."),
+            _item(
+                "Source",
+                "Letterboxd exports: ratings.csv for star ratings and modeling; "
+                "optional diary.csv for every film you have logged as watched (rated or not).",
+            ),
             _item(
                 "Enrichment",
                 "Each film is matched to The Movie Database (TMDB) and enriched with metadata: "
@@ -91,6 +95,11 @@ def layout() -> html.Div:
                 "The Model page reports Ridge coefficient mass by feature group (numeric, language, "
                 "TF-IDF text blocks) and group-level permutation importance (MAE increase when a block "
                 "is shuffled), plus the strongest individual coefficients.",
+            ),
+            _item(
+                "Taste map",
+                "The Taste map page PCA-reduces sentence embeddings to three dimensions and "
+                "clusters films with KMeans so you can explore taste neighborhoods interactively.",
             ),
             _item(
                 "Metrics",

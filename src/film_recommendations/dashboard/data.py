@@ -6,15 +6,18 @@ import pycountry
 from scipy.stats import spearmanr
 from sklearn.metrics import mean_absolute_error, r2_score, root_mean_squared_error
 
-from ..constants import DEFAULT_SNAP_STEP
+from ..constants import DEFAULT_SNAP_STEP, RATING_CLIP_MAX, RATING_CLIP_MIN
 
 TMDB_IMAGE_BASE = "https://image.tmdb.org/t/p"
 
 _TEXT_COLUMNS = ("poster_path", "genres", "original_language", "overview", "keywords", "people_text")
 
 _films: pd.DataFrame | None = None
+_taste_films: pd.DataFrame | None = None
 _importance: dict[str, pd.DataFrame] | None = None
 _selected_model: str | None = None
+_pca_explained: tuple[float, float, float] | None = None
+_taste_embeddings: np.ndarray | None = None
 
 
 def set_films(films_df: pd.DataFrame) -> None:
@@ -84,6 +87,93 @@ def get_selected_model() -> str | None:
     return _selected_model
 
 
+def set_pca_explained(explained_variance_ratio: np.ndarray | None) -> None:
+    """Register PCA explained-variance ratios for the Taste map axis labels."""
+    global _pca_explained
+    if explained_variance_ratio is None:
+        _pca_explained = None
+        return
+    padded = np.zeros(3, dtype=np.float64)
+    n = min(3, len(explained_variance_ratio))
+    padded[:n] = explained_variance_ratio[:n]
+    _pca_explained = (float(padded[0]), float(padded[1]), float(padded[2]))
+
+
+def get_pca_explained() -> tuple[float, float, float] | None:
+    """Return PCA variance ratios for PC1-PC3 when the taste map is available."""
+    return _pca_explained
+
+
+def set_taste_films(films_df: pd.DataFrame | None) -> None:
+    """Register films for the Taste map (all watched titles, rating optional)."""
+    global _taste_films
+    if films_df is None:
+        _taste_films = None
+        return
+    df = films_df.copy()
+    if "poster_path" not in df.columns:
+        df["poster_path"] = ""
+    for col in _TEXT_COLUMNS:
+        if col in df.columns:
+            df[col] = df[col].fillna("")
+    df["Date"] = pd.to_datetime(df["Date"])
+    if "pred" not in df.columns:
+        df["pred"] = float("nan")
+    if "err" not in df.columns:
+        df["err"] = float("nan")
+    _taste_films = df
+
+
+def get_taste_films() -> pd.DataFrame:
+    """Return the Taste map film table (falls back to rated films if unset)."""
+    if _taste_films is not None:
+        return _taste_films
+    return get_films()
+
+
+def has_taste_space() -> bool:
+    """True when taste map data includes projection coordinates."""
+    source = _taste_films if _taste_films is not None else _films
+    return source is not None and ("pc1" in source.columns or "um1" in source.columns)
+
+
+def set_taste_embeddings(embeddings: np.ndarray | None) -> None:
+    """Register the full embedding matrix aligned with taste films row order."""
+    global _taste_embeddings
+    _taste_embeddings = None if embeddings is None else np.asarray(embeddings, dtype=np.float32)
+
+
+def get_taste_embeddings() -> np.ndarray | None:
+    """Return the taste-map embedding matrix when registered."""
+    return _taste_embeddings
+
+
+def films_with_clusters(n_clusters: int, projection: str = "pca") -> pd.DataFrame:
+    """Return films with KMeans labels recomputed in the active projection."""
+    from ..film_taste_space import cluster_coordinates, projection_columns
+
+    df = get_taste_films().copy()
+    if not has_taste_space():
+        return df
+    x_col, y_col, z_col = projection_columns(projection)
+    missing = [c for c in (x_col, y_col, z_col) if c not in df.columns]
+    if missing:
+        return df
+    coords = df[[x_col, y_col, z_col]].to_numpy()
+    labels = cluster_coordinates(coords, n_clusters)
+    df["cluster"] = labels
+    df["cluster_label"] = df["cluster"].map(lambda c: f"Cluster {c + 1}")
+    return df
+
+
+def taste_genre_options() -> list[str]:
+    """Sorted unique genres across all watched films on the taste map."""
+    genres: set[str] = set()
+    for value in get_taste_films()["genres"]:
+        genres.update(g for g in str(value).split("|") if g)
+    return sorted(genres)
+
+
 def genre_options() -> list[str]:
     """Sorted unique genres across all films."""
     genres: set[str] = set()
@@ -110,6 +200,21 @@ def language_name(code: str) -> str:
 def language_options() -> list[dict]:
     """Dropdown options for languages: full names as labels, codes as values."""
     codes = {lang for lang in get_films()["original_language"] if lang}
+    return sorted(
+        ({"label": language_name(code), "value": code} for code in codes),
+        key=lambda option: option["label"],
+    )
+
+
+def taste_year_bounds() -> tuple[int, int]:
+    """(min, max) year watched for the taste map."""
+    years = get_taste_films()["Date"].dt.year
+    return int(years.min()), int(years.max())
+
+
+def taste_language_options() -> list[dict]:
+    """Language dropdown options for watched films on the taste map."""
+    codes = {lang for lang in get_taste_films()["original_language"] if lang}
     return sorted(
         ({"label": language_name(code), "value": code} for code in codes),
         key=lambda option: option["label"],
@@ -152,7 +257,10 @@ def filter_films(
         years = df["Date"].dt.year
         mask &= (years >= year_range[0]) & (years <= year_range[1])
     if rating_range:
-        mask &= (df["Rating"] >= rating_range[0]) & (df["Rating"] <= rating_range[1])
+        at_full_span = rating_range[0] <= RATING_CLIP_MIN and rating_range[1] >= RATING_CLIP_MAX
+        if not at_full_span:
+            rated = pd.to_numeric(df["Rating"], errors="coerce")
+            mask &= rated.notna() & (rated >= rating_range[0]) & (rated <= rating_range[1])
 
     return df[mask]
 

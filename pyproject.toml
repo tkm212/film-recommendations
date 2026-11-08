@@ -116,6 +116,7 @@ preview = true
 known_first_party = ["film_recommendations"]
 
 [tool.deptry.per_rule_ignores]
+DEP001 = ["umap"]
 DEP002 = ["pandas", "python-dotenv", "torch", "transformers"]
 
 [tool.uv]
