@@ -96,8 +96,8 @@ def layout() -> html.Div:
             card([
                 html.P(
                     "PCA/UMAP and clustering need cached embeddings from ingest or train. "
-                    "Add inputs/watched.csv (all-time watched) and diary.csv for your library, "
-                    "then run uv run python scripts/main.py --ingest.",
+                    "Run uv run python scripts/main.py --ingest to build the TMDB catalog and map your "
+                    "Letterboxd exports (diary / ratings / watched.csv).",
                     style={"color": COLORS["text_secondary"], "margin": 0},
                 ),
             ]),
@@ -189,8 +189,8 @@ def layout() -> html.Div:
     return html.Div([
         page_header(
             "Taste map",
-            "Every film on your Letterboxd watched list forms the map; diary/library films are highlighted. "
-            "PCA or UMAP, clusters, timeline, and neighbors apply to your library subset.",
+            "Background: thousands of TMDB films (Letterboxd has no public catalog). "
+            "Your Letterboxd exports are highlighted. Clusters and timeline use your library subset.",
         ),
         filter_toolbar,
         map_toolbar,

@@ -23,6 +23,7 @@ from sklearn.metrics import mean_absolute_error
 from film_recommendations.cleaning import clean_data
 from film_recommendations.constants import (
     DEFAULT_N_CLUSTERS,
+    DEFAULT_UNIVERSE_MAX_FILMS,
     EMBEDDING_CACHE_FILE,
     N_FOLDS,
     RATED_UMAP_CACHE_FILE,
@@ -39,6 +40,11 @@ from film_recommendations.embeddings import add_merged_text, attach_embeddings, 
 from film_recommendations.feature_extraction import create_features
 from film_recommendations.feature_importance import analyze_model
 from film_recommendations.film_taste_space import attach_taste_coordinates, load_embedding_matrix
+from film_recommendations.film_universe import (
+    expected_universe_count,
+    load_universe_for_ingest,
+    personal_letterboxd_union,
+)
 from film_recommendations.ml_fitting import (
     create_transformed_features,
     evaluate_rating_predictions,
@@ -50,12 +56,7 @@ from film_recommendations.model_comparison import (
     resolve_model_name,
 )
 from film_recommendations.model_specs import MODEL_BUILDERS
-from film_recommendations.watch_history import (
-    expected_universe_count,
-    load_film_universe,
-    load_my_films,
-    tag_library_membership,
-)
+from film_recommendations.watch_history import load_my_films, tag_library_membership
 
 logger = logging.getLogger(__name__)
 
@@ -95,9 +96,13 @@ def ingest_features() -> pd.DataFrame:
     return features_df
 
 
-def ingest_universe_features() -> pd.DataFrame:
-    """TMDB-enrich the full Letterboxd watched list (or library fallback) for the taste-map universe."""
-    universe = load_film_universe(REPO_ROOT)
+def ingest_universe_features(
+    max_films: int = DEFAULT_UNIVERSE_MAX_FILMS,
+    *,
+    rebuild_catalog: bool = False,
+) -> pd.DataFrame:
+    """TMDB-enrich a broad movie catalog (+ your Letterboxd titles) for the taste map."""
+    universe = load_universe_for_ingest(REPO_ROOT, max_films, rebuild_catalog=rebuild_catalog)
     features_df, missing = create_features(universe)
 
     UNIVERSE_FEATURES_FILE.parent.mkdir(parents=True, exist_ok=True)
@@ -114,15 +119,23 @@ def ingest_universe_features() -> pd.DataFrame:
     return features_df
 
 
-def ingest_watched_features() -> pd.DataFrame:
+def ingest_watched_features(
+    max_films: int = DEFAULT_UNIVERSE_MAX_FILMS,
+    *,
+    rebuild_catalog: bool = False,
+) -> pd.DataFrame:
     """Backward-compatible alias for universe ingest."""
-    return ingest_universe_features()
+    return ingest_universe_features(max_films, rebuild_catalog=rebuild_catalog)
 
 
-def ingest_all() -> pd.DataFrame:
-    """Ingest rated films for training and full watch history for the taste map."""
+def ingest_all(
+    max_films: int = DEFAULT_UNIVERSE_MAX_FILMS,
+    *,
+    rebuild_catalog: bool = False,
+) -> pd.DataFrame:
+    """Ingest rated films for training and the taste-map TMDB universe."""
     rated = ingest_features()
-    ingest_universe_features()
+    ingest_universe_features(max_films, rebuild_catalog=rebuild_catalog)
     return rated
 
 
@@ -320,7 +333,9 @@ def _join_predictions(features_df: pd.DataFrame, predictions_df: pd.DataFrame) -
 def prepare_taste_map(predictions_df: pd.DataFrame) -> pd.DataFrame | None:
     """Build taste-map coordinates for the film universe; tag diary/library subset."""
     expected_n = expected_universe_count(REPO_ROOT)
-    library = load_my_films(REPO_ROOT)
+    library = personal_letterboxd_union(REPO_ROOT)
+    if library.empty:
+        library = load_my_films(REPO_ROOT)
 
     if UNIVERSE_FEATURES_FILE.exists():
         universe_df = pd.read_csv(UNIVERSE_FEATURES_FILE, parse_dates=["Date"])
@@ -389,6 +404,17 @@ def parse_args() -> argparse.Namespace:
         help="Model to fit when training (default: lowest-MAE from CV benchmark).",
     )
     parser.add_argument("--port", type=int, default=8050, help="Dashboard port (default: 8050).")
+    parser.add_argument(
+        "--universe-max-films",
+        type=int,
+        default=DEFAULT_UNIVERSE_MAX_FILMS,
+        help=f"TMDB catalog size for taste map (default: {DEFAULT_UNIVERSE_MAX_FILMS}).",
+    )
+    parser.add_argument(
+        "--rebuild-universe-catalog",
+        action="store_true",
+        help="Re-fetch TMDB discover pages even if outputs/tmdb_universe_catalog.csv exists.",
+    )
     return parser.parse_args()
 
 
@@ -398,7 +424,10 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 
     if args.ingest:
-        films_df, importance, _comparison, selected = train(ingest_all(), model_name=args.model)
+        films_df, importance, _comparison, selected = train(
+            ingest_all(args.universe_max_films, rebuild_catalog=args.rebuild_universe_catalog),
+            model_name=args.model,
+        )
     elif args.train:
         films_df, importance, _comparison, selected = train(load_cached_features(), model_name=args.model)
     else:

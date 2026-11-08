@@ -79,29 +79,9 @@ def load_my_films(repo_root: Path) -> pd.DataFrame:
     raise FileNotFoundError(msg)
 
 
-def load_film_universe(repo_root: Path) -> pd.DataFrame:
-    """All films for the taste-map background (Letterboxd watched.csv when present)."""
-    inputs = _inputs_dir(repo_root)
-    watched_path = inputs / WATCHED_FILENAME
-    ratings_path = inputs / RATINGS_FILENAME
-
-    if watched_path.exists():
-        universe = clean_watched_data(pd.read_csv(watched_path))
-        if ratings_path.exists():
-            universe = merge_letterboxd_ratings(universe, pd.read_csv(ratings_path))
-        return dedupe_watches(universe)
-
-    return dedupe_watches(load_my_films(repo_root))
-
-
 def load_watch_history(repo_root: Path) -> pd.DataFrame:
     """Backward-compatible alias for load_my_films."""
     return load_my_films(repo_root)
-
-
-def expected_universe_count(repo_root: Path) -> int:
-    """Unique films in the current universe export (watched.csv or fallback)."""
-    return len(load_film_universe(repo_root))
 
 
 def expected_watched_count(repo_root: Path) -> int:
