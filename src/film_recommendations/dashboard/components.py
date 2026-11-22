@@ -8,6 +8,7 @@ from .theme import COLORS
 NAV_LINKS = [
     ("Overview", "/"),
     ("Films", "/films"),
+    ("Discover", "/discover"),
     ("Taste map", "/taste"),
     ("Model", "/model"),
     ("About", "/about"),

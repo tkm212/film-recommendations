@@ -160,6 +160,16 @@ def library_films() -> pd.DataFrame:
     return df.copy()
 
 
+def library_film_keys() -> set[tuple[str, int]]:
+    """(Name, Year) keys for films in the Letterboxd library overlay."""
+    keys: set[tuple[str, int]] = set()
+    years = pd.to_numeric(library_films()["Year"], errors="coerce")
+    for title, year in zip(library_films()["Name"], years, strict=True):
+        if pd.notna(year):
+            keys.add((str(title), int(year)))
+    return keys
+
+
 def films_with_clusters(
     n_clusters: int,
     projection: str = "pca",

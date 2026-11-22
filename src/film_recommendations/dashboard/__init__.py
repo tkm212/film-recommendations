@@ -56,7 +56,7 @@ def create_app(
     )
 
     # Imported after app creation so dash.register_page can attach to this app.
-    from .pages import about, films, model, overview, taste_map  # noqa: F401
+    from .pages import about, films, model, overview, recommendations, taste_map  # noqa: F401
 
     app.layout = html.Div(
         style={"fontFamily": FONT_FAMILY},

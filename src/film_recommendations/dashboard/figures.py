@@ -190,47 +190,51 @@ def _split_taste_map_layers(
     return pd.DataFrame(), map_df
 
 
-def _add_taste_background(
-    fig: go.Figure,
-    background: pd.DataFrame,
-    x_col: str,
-    y_col: str,
-    z_col: str,
-    *,
-    dimensions: int,
-) -> None:
+def taste_reference_figure(
+    films_df: pd.DataFrame,
+    projection: str = "pca",
+    explained_variance: tuple[float, float, float] | None = None,
+    uirevision: str | None = None,
+) -> go.Figure:
+    """2D scatter of TMDB titles outside the library (same projection as the main map)."""
+    from ..film_taste_space import projection_columns
+
+    x_col, y_col, _z_col = projection_columns(projection)
+    background, _ = _split_taste_map_layers(films_df, None)
+    if films_df.empty or x_col not in films_df.columns:
+        return empty_figure("Reference catalog unavailable")
     if background.empty:
-        return
-    custom = background[["Name", "Year", "tmdb_id"]].to_numpy()
-    hover = background["Name"].astype(str) + " (" + background["Year"].astype(str) + ")"
-    marker = {"size": 4 if dimensions == 3 else 5, "color": COLORS["text_secondary"], "opacity": 0.2}
-    if dimensions == 2:
-        fig.add_trace(
-            go.Scatter(
-                x=background[x_col],
-                y=background[y_col],
-                mode="markers",
-                name="TMDB reference catalog",
-                marker=marker,
-                customdata=custom,
-                text=hover,
-                hovertemplate="%{text}<extra>not in diary filter</extra>",
-            )
-        )
-        return
-    fig.add_trace(
-        go.Scatter3d(
+        return empty_figure("No TMDB reference catalog — ingest the taste-map universe")
+
+    proj_label = "PCA" if projection == "pca" else "UMAP"
+    labels = {x_col: f"{proj_label} 1", y_col: f"{proj_label} 2"}
+    if projection == "pca" and explained_variance:
+        labels[x_col] = f"PC 1 ({explained_variance[0]:.0%} var.)"
+        labels[y_col] = f"PC 2 ({explained_variance[1]:.0%} var.)"
+
+    fig = go.Figure(
+        go.Scatter(
             x=background[x_col],
             y=background[y_col],
-            z=background[z_col],
             mode="markers",
-            name="TMDB reference catalog",
-            marker=marker,
-            customdata=custom,
-            text=hover,
-            hovertemplate="%{text}<extra>not in diary filter</extra>",
+            name="TMDB catalog",
+            marker={"size": 3, "color": COLORS["text_secondary"], "opacity": 0.35},
+            customdata=background[["Name", "Year", "tmdb_id"]].to_numpy(),
+            text=background["Name"].astype(str) + " (" + background["Year"].astype(str) + ")",
+            hovertemplate="%{text}<extra>TMDB reference</extra>",
         )
     )
+    fig.update_layout(
+        template=PLOT_TEMPLATE,
+        height=280,
+        title=f"TMDB reference catalog ({len(background):,} films)",
+        xaxis_title=labels[x_col],
+        yaxis_title=labels[y_col],
+        margin={"l": 48, "r": 24, "t": 48, "b": 48},
+        uirevision=uirevision or "taste-reference",
+        showlegend=False,
+    )
+    return fig
 
 
 def taste_map_figure(
@@ -240,15 +244,16 @@ def taste_map_figure(
     explained_variance: tuple[float, float, float] | None = None,
     color_by: str = "cluster",
     highlight_df: pd.DataFrame | None = None,
+    uirevision: str | None = None,
 ) -> go.Figure:
-    """2D or 3D scatter: full universe faded in the back, library subset colored."""
+    """2D or 3D scatter of your library subset (TMDB cloud lives on the reference chart)."""
     from ..film_taste_space import projection_columns
 
     x_col, y_col, z_col = projection_columns(projection)
     if films_df.empty or x_col not in films_df.columns:
         return empty_figure("Taste map unavailable — run training to compute embeddings")
 
-    background, foreground = _split_taste_map_layers(films_df, highlight_df)
+    _background, foreground = _split_taste_map_layers(films_df, highlight_df)
     if foreground.empty:
         return empty_figure("No films match the current filters")
 
@@ -280,7 +285,6 @@ def taste_map_figure(
             labels[z_col] = f"PC 3 ({explained_variance[2]:.0%} var.)"
 
     color_field, color_args, title_suffix = _taste_color_encoding(color_by)
-    dim_label = "2D" if dimensions == 2 else "3D"
     hover = {
         "Year": True,
         "Rating": ":.1f",
@@ -308,11 +312,11 @@ def taste_map_figure(
             **color_args,
         )
         fig.update_traces(marker={"size": 8, "opacity": 0.85, "line": {"width": 0.5, "color": "#ffffff"}})
-        _add_taste_background(fig, background, x_col, y_col, z_col, dimensions=2)
         fig.update_layout(
-            title=f"{proj_label} {dim_label} taste map — your library on {len(films_df):,} films ({title_suffix})",
+            title=f"Your library — {len(plot_df)} films ({title_suffix})",
             xaxis_title=labels[x_col],
             yaxis_title=labels[y_col],
+            uirevision=uirevision or "taste-map",
         )
         return fig
 
@@ -331,9 +335,9 @@ def taste_map_figure(
         **color_args,
     )
     fig.update_traces(marker={"size": 5, "opacity": 0.88, "line": {"width": 0.5, "color": "#ffffff"}})
-    _add_taste_background(fig, background, x_col, y_col, z_col, dimensions=3)
     fig.update_layout(
-        title=f"{proj_label} {dim_label} taste map — your library on {len(films_df):,} films ({title_suffix})",
+        title=f"Your library — {len(plot_df)} films ({title_suffix})",
+        uirevision=uirevision or "taste-map",
         scene={
             "xaxis_title": labels[x_col],
             "yaxis_title": labels[y_col],

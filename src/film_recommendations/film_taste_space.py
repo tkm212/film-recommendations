@@ -194,6 +194,10 @@ def load_embedding_matrix(cache_path: Path) -> np.ndarray:
     raise ValueError(msg)
 
 
+def _film_key(name: str, year: int | float) -> tuple[str, int]:
+    return str(name), int(year)
+
+
 def nearest_neighbor_films(
     films_df: pd.DataFrame,
     embeddings: np.ndarray,
@@ -217,6 +221,55 @@ def nearest_neighbor_films(
     neighbors = [i for i in order if i != pos][:k]
     out = films_df.iloc[neighbors].copy()
     out["similarity"] = 1.0 - dists[neighbors]
+    return out.sort_values("similarity", ascending=False)
+
+
+def recommend_similar_films(
+    films_df: pd.DataFrame,
+    embeddings: np.ndarray,
+    name: str,
+    year: int | float,
+    exclude_keys: set[tuple[str, int]],
+    *,
+    k: int = 10,
+    candidate_pool: int = 120,
+) -> pd.DataFrame:
+    """Nearest films in embedding space, skipping titles already in the user's library."""
+    year_int = int(year)
+    names = films_df["Name"].astype(str)
+    years = pd.to_numeric(films_df["Year"], errors="coerce")
+    match = (names == name) & (years == year_int)
+    if not match.any():
+        return pd.DataFrame()
+    pos = int(match.to_numpy().argmax())
+    if pos >= len(embeddings):
+        return pd.DataFrame()
+
+    query_key = _film_key(name, year_int)
+    skip = set(exclude_keys)
+    skip.add(query_key)
+
+    dists = cosine_distances(embeddings[pos : pos + 1], embeddings).ravel()
+    order = np.argsort(dists)
+    picks: list[int] = []
+    for idx in order[:candidate_pool]:
+        if idx == pos:
+            continue
+        row = films_df.iloc[idx]
+        y = years.iloc[idx]
+        if pd.isna(y):
+            continue
+        key = _film_key(str(row["Name"]), int(y))
+        if key in skip:
+            continue
+        picks.append(idx)
+        if len(picks) >= k:
+            break
+
+    if not picks:
+        return pd.DataFrame()
+    out = films_df.iloc[picks].copy()
+    out["similarity"] = 1.0 - dists[picks]
     return out.sort_values("similarity", ascending=False)
 
 

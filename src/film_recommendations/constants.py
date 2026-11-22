@@ -1,6 +1,5 @@
 """Shared constants for TMDB access, features, and model training."""
 
-import tempfile
 from pathlib import Path
 
 # --- TMDB / HTTP ---
@@ -11,7 +10,9 @@ TMDB_DEFAULT_HEADERS = {
 }
 TMDB_REQUEST_TIMEOUT_S = 30
 TMDB_CACHE_SLEEP_S = 0.25
-CACHE_DIR = Path(tempfile.mkdtemp(prefix="tmdb_cache_"))
+TMDB_MAX_RETRIES = 6
+TMDB_RETRY_BACKOFF_S = 2.0
+CACHE_DIR = Path(__file__).resolve().parents[2] / "tmdb_cache"
 
 # --- Data paths ---
 DEFAULT_RATINGS_PATH = "../inputs/ratings.csv"
