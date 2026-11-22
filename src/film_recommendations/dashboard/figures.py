@@ -1,5 +1,6 @@
 """Plotly figure builders for the dashboard pages."""
 
+import numpy as np
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -8,6 +9,21 @@ from ..constants import RATING_CLIP_MAX, RATING_CLIP_MIN
 from .theme import CHART_COLORWAY, COLORS, PLOT_TEMPLATE
 
 FIGURE_HEIGHT = 380
+
+# Deep-space gradient for the catalog scatter (release year → color)
+UNIVERSE_YEAR_COLORSCALE = [
+    [0.0, "#0c0a1f"],
+    [0.2, "#1e1b4b"],
+    [0.4, "#5b21b6"],
+    [0.55, "#2563eb"],
+    [0.72, "#22d3ee"],
+    [0.88, "#a78bfa"],
+    [1.0, "#fde68a"],
+]
+
+UNIVERSE_PANEL_BG = "#060814"
+UNIVERSE_AXIS = "rgba(168, 176, 208, 0.35)"
+UNIVERSE_GRID = "rgba(255, 255, 255, 0.07)"
 
 
 def _taste_color_encoding(color_by: str) -> tuple[str, dict, str]:
@@ -190,13 +206,29 @@ def _split_taste_map_layers(
     return pd.DataFrame(), map_df
 
 
+def _click_customdata(frame: pd.DataFrame) -> np.ndarray:
+    names = frame["Name"].to_numpy()
+    years = frame["Year"].to_numpy()
+    tmdb = frame["tmdb_id"].to_numpy() if "tmdb_id" in frame.columns else np.full(len(frame), None)
+    return np.column_stack([names, years, tmdb])
+
+
+def _catalog_release_years(frame: pd.DataFrame) -> pd.Series:
+    if "release_year_tmdb" in frame.columns:
+        years = pd.to_numeric(frame["release_year_tmdb"], errors="coerce")
+        if years.notna().any():
+            return years
+    return pd.to_numeric(frame["Year"], errors="coerce")
+
+
 def taste_reference_figure(
     films_df: pd.DataFrame,
     projection: str = "pca",
     explained_variance: tuple[float, float, float] | None = None,
     uirevision: str | None = None,
+    library_overlay: pd.DataFrame | None = None,
 ) -> go.Figure:
-    """2D scatter of TMDB titles outside the library (same projection as the main map)."""
+    """2D WebGL starfield of TMDB titles, colored by era; library points as highlights."""
     from ..film_taste_space import projection_columns
 
     x_col, y_col, _z_col = projection_columns(projection)
@@ -212,27 +244,87 @@ def taste_reference_figure(
         labels[x_col] = f"PC 1 ({explained_variance[0]:.0%} var.)"
         labels[y_col] = f"PC 2 ({explained_variance[1]:.0%} var.)"
 
+    years = _catalog_release_years(background)
+    year_min = int(years.min()) if years.notna().any() else 1970
+    year_max = int(years.max()) if years.notna().any() else 2025
+    hover_text = background["Name"].astype(str) + " (" + background["Year"].astype(str) + ")"
+
     fig = go.Figure(
-        go.Scatter(
+        go.Scattergl(
             x=background[x_col],
             y=background[y_col],
             mode="markers",
-            name="TMDB catalog",
-            marker={"size": 3, "color": COLORS["text_secondary"], "opacity": 0.35},
-            customdata=background[["Name", "Year", "tmdb_id"]].to_numpy(),
-            text=background["Name"].astype(str) + " (" + background["Year"].astype(str) + ")",
-            hovertemplate="%{text}<extra>TMDB reference</extra>",
+            name="Catalog",
+            marker={
+                "size": 5,
+                "color": years,
+                "colorscale": UNIVERSE_YEAR_COLORSCALE,
+                "cmin": year_min,
+                "cmax": year_max,
+                "opacity": 0.72,
+                "colorbar": {
+                    "title": {"text": "Release", "font": {"color": "#c5c9e0", "size": 11}},
+                    "tickfont": {"color": "#9aa3c7", "size": 10},
+                    "len": 0.55,
+                    "thickness": 10,
+                    "outlinecolor": UNIVERSE_GRID,
+                },
+            },
+            customdata=_click_customdata(background),
+            text=hover_text,
+            hovertemplate="%{text}<extra>catalog</extra>",
         )
     )
+
+    if library_overlay is not None and not library_overlay.empty and x_col in library_overlay.columns:
+        lib = library_overlay.dropna(subset=[x_col, y_col])
+        if not lib.empty:
+            lib_hover = lib["Name"].astype(str) + " (" + lib["Year"].astype(str) + ")"
+            fig.add_trace(
+                go.Scattergl(
+                    x=lib[x_col],
+                    y=lib[y_col],
+                    mode="markers",
+                    name="Your films",
+                    marker={
+                        "size": 9,
+                        "color": "#fde68a",
+                        "opacity": 0.95,
+                        "line": {"width": 1.2, "color": "#ffffff"},
+                    },
+                    customdata=_click_customdata(lib),
+                    text=lib_hover,
+                    hovertemplate="%{text}<extra>your library</extra>",
+                )
+            )
+
+    axis_style = {
+        "gridcolor": UNIVERSE_GRID,
+        "zeroline": False,
+        "linecolor": UNIVERSE_AXIS,
+        "tickfont": {"color": "#9aa3c7", "size": 11},
+        "titlefont": {"color": "#c5c9e0", "size": 12},
+    }
+
     fig.update_layout(
-        template=PLOT_TEMPLATE,
-        height=280,
-        title=f"TMDB reference catalog ({len(background):,} films)",
+        height=340,
+        title={
+            "text": f"Film universe · {len(background):,} titles · your picks in gold",
+            "font": {"color": "#e8ecff", "size": 15},
+            "x": 0.02,
+            "xanchor": "left",
+        },
+        paper_bgcolor=UNIVERSE_PANEL_BG,
+        plot_bgcolor=UNIVERSE_PANEL_BG,
+        font={"color": "#c5c9e0"},
         xaxis_title=labels[x_col],
         yaxis_title=labels[y_col],
-        margin={"l": 48, "r": 24, "t": 48, "b": 48},
+        xaxis=axis_style,
+        yaxis=axis_style,
+        margin={"l": 48, "r": 8, "t": 52, "b": 48},
         uirevision=uirevision or "taste-reference",
         showlegend=False,
+        hoverlabel={"bgcolor": "#151b2e", "bordercolor": "#4c1d95", "font": {"color": "#e8ecff"}},
     )
     return fig
 

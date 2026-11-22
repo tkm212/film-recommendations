@@ -47,8 +47,7 @@ def layout() -> html.Div:
             page_header("Discover", "Films to watch next, picked from TMDB space."),
             card([
                 html.P(
-                    "Run ingest and train so the taste-map universe and embeddings exist, "
-                    "then reload the dashboard.",
+                    "Run ingest and train so the taste-map universe and embeddings exist, then reload the dashboard.",
                     style={"color": COLORS["text_secondary"], "margin": 0},
                 ),
             ]),

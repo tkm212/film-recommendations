@@ -199,7 +199,7 @@ def layout() -> html.Div:
     return html.Div([
         page_header(
             "Taste map",
-            "Main chart: your Letterboxd library. TMDB reference catalog is the 2D chart below for discovery context.",
+            "Your library in 3D above; the film universe below is the full TMDB catalog in embedding space.",
         ),
         filter_toolbar,
         map_toolbar,
@@ -231,8 +231,11 @@ def layout() -> html.Div:
                 ),
             ],
         ),
-        section_title("TMDB reference catalog"),
-        card([dcc.Graph(id="tm-reference", figure=empty_figure(), config={"displayModeBar": True})]),
+        section_title("Film universe"),
+        card(
+            [dcc.Graph(id="tm-reference", figure=empty_figure(), config={"displayModeBar": True})],
+            class_name="card universe-panel",
+        ),
         section_title("Watch timeline"),
         card([dcc.Graph(id="tm-timeline", config={"displayModeBar": False})]),
         section_title("Cluster neighborhoods"),
@@ -333,6 +336,7 @@ def update_taste_map(
         projection=projection,
         explained_variance=explained,
         uirevision=f"ref-{uirev}",
+        library_overlay=df,
     )
     timeline = taste_timeline_figure(df)
     summary_df = cluster_summary(df)
