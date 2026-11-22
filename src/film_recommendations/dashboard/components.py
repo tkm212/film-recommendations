@@ -8,6 +8,7 @@ from .theme import COLORS
 NAV_LINKS = [
     ("Overview", "/"),
     ("Films", "/films"),
+    ("Discover", "/discover"),
     ("Taste map", "/taste"),
     ("Model", "/model"),
     ("About", "/about"),
@@ -35,14 +36,15 @@ def navbar() -> html.Header:
     )
 
 
-def card(children: list, **style_overrides: str) -> html.Div:
+def card(children: list, *, class_name: str = "card", **style_overrides: str) -> html.Div:
     """White elevated card container.
 
     Args:
         children (list): Card contents.
+        class_name (str): CSS class (e.g. ``card universe-panel``).
         **style_overrides (str): Extra CSS properties merged into the style.
     """
-    return html.Div(children=children, className="card", style=style_overrides or None)
+    return html.Div(children=children, className=class_name, style=style_overrides or None)
 
 
 def page_header(title: str, subtitle: str = "") -> html.Div:

@@ -14,7 +14,9 @@ from .constants import (
     CACHE_DIR,
     TMDB_BASE,
     TMDB_CACHE_SLEEP_S,
+    TMDB_MAX_RETRIES,
     TMDB_REQUEST_TIMEOUT_S,
+    TMDB_RETRY_BACKOFF_S,
 )
 from .data_access import create_tmdb_session, get_tmdb_api_key
 
@@ -57,21 +59,50 @@ def cached_get(
         RuntimeError: If the HTTP request fails (non-2xx status).
     """
     path = _cache_path(cache_key)
+    path.parent.mkdir(parents=True, exist_ok=True)
     if path.exists():
         return json.loads(path.read_text(encoding="utf-8"))
+
     session = create_tmdb_session()
+    last_error: Exception | None = None
 
-    r = session.get(url, params=params, timeout=TMDB_REQUEST_TIMEOUT_S)
-    try:
-        r.raise_for_status()
-    except requests.HTTPError as e:
-        msg = f"TMDB request failed ({r.status_code})."
-        raise RuntimeError(msg) from e
+    for attempt in range(1, TMDB_MAX_RETRIES + 1):
+        try:
+            response = session.get(url, params=params, timeout=TMDB_REQUEST_TIMEOUT_S)
+            if response.status_code == 429:
+                wait = TMDB_RETRY_BACKOFF_S * (2 ** (attempt - 1))
+                logger.warning("TMDB rate limit (429); sleeping %.1fs (attempt %d/%d)", wait, attempt, TMDB_MAX_RETRIES)
+                last_error = RuntimeError("TMDB rate limit (429)")
+                time.sleep(wait)
+                continue
+            response.raise_for_status()
+            payload = response.json()
+        except requests.HTTPError as exc:
+            status = exc.response.status_code if exc.response is not None else None
+            if status in {500, 502, 503, 504}:
+                last_error = exc
+            else:
+                msg = f"TMDB request failed ({status})."
+                raise RuntimeError(msg) from exc
+        except (requests.ConnectionError, requests.Timeout) as exc:
+            last_error = exc
+        else:
+            path.write_text(json.dumps(payload, ensure_ascii=False), encoding="utf-8")
+            time.sleep(sleep_s)
+            return payload
 
-    data = r.json()
-    path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
-    time.sleep(sleep_s)
-    return data
+        wait = TMDB_RETRY_BACKOFF_S * (2 ** (attempt - 1))
+        logger.warning(
+            "TMDB request error (attempt %d/%d): %s; retrying in %.1fs",
+            attempt,
+            TMDB_MAX_RETRIES,
+            last_error,
+            wait,
+        )
+        time.sleep(wait)
+
+    msg = f"TMDB request failed after {TMDB_MAX_RETRIES} attempts: {url}"
+    raise RuntimeError(msg) from last_error
 
 
 def tmdb_search_movie(title: str, year: int | None = None) -> dict[str, Any] | None:
@@ -111,6 +142,25 @@ def tmdb_search_movie(title: str, year: int | None = None) -> dict[str, Any] | N
 
     best = sorted(results, key=score, reverse=True)[0]
     return best
+
+
+def tmdb_discover_movies(
+    page: int = 1,
+    *,
+    sort_by: str = "popularity.desc",
+    vote_count_gte: int = 50,
+    include_adult: bool = False,
+) -> dict[str, Any]:
+    """Paginated TMDB discover results (broad movie catalog proxy for taste-map background)."""
+    params: dict[str, Any] = {
+        "api_key": get_tmdb_api_key(),
+        "page": page,
+        "sort_by": sort_by,
+        "vote_count.gte": vote_count_gte,
+        "include_adult": str(include_adult).lower(),
+    }
+    cache_key = f"discover__p{page}__{sort_by}__vc{vote_count_gte}"
+    return cached_get(f"{TMDB_BASE}/discover/movie", params=params, cache_key=cache_key)
 
 
 def tmdb_movie_details(movie_id: int) -> dict[str, Any]:

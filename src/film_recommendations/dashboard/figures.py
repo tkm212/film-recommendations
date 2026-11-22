@@ -1,5 +1,6 @@
 """Plotly figure builders for the dashboard pages."""
 
+import numpy as np
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -8,6 +9,21 @@ from ..constants import RATING_CLIP_MAX, RATING_CLIP_MIN
 from .theme import CHART_COLORWAY, COLORS, PLOT_TEMPLATE
 
 FIGURE_HEIGHT = 380
+
+# Deep-space gradient for the catalog scatter (release year → color)
+UNIVERSE_YEAR_COLORSCALE = [
+    [0.0, "#0c0a1f"],
+    [0.2, "#1e1b4b"],
+    [0.4, "#5b21b6"],
+    [0.55, "#2563eb"],
+    [0.72, "#22d3ee"],
+    [0.88, "#a78bfa"],
+    [1.0, "#fde68a"],
+]
+
+UNIVERSE_PANEL_BG = "#060814"
+UNIVERSE_AXIS = "rgba(168, 176, 208, 0.35)"
+UNIVERSE_GRID = "rgba(255, 255, 255, 0.07)"
 
 
 def _taste_color_encoding(color_by: str) -> tuple[str, dict, str]:
@@ -177,21 +193,163 @@ def group_permutation_figure(perm_df: pd.DataFrame) -> go.Figure:
     return fig
 
 
+def _split_taste_map_layers(
+    map_df: pd.DataFrame, highlight_df: pd.DataFrame | None
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Background universe vs highlighted library points."""
+    has_background = "in_library" in map_df.columns and (~map_df["in_library"]).any()
+    background = map_df[~map_df["in_library"]] if has_background else pd.DataFrame()
+    if highlight_df is not None:
+        return background, highlight_df
+    if has_background:
+        return background, map_df[map_df["in_library"]]
+    return pd.DataFrame(), map_df
+
+
+def _click_customdata(frame: pd.DataFrame) -> np.ndarray:
+    names = frame["Name"].to_numpy()
+    years = frame["Year"].to_numpy()
+    tmdb = frame["tmdb_id"].to_numpy() if "tmdb_id" in frame.columns else np.full(len(frame), None)
+    return np.column_stack([names, years, tmdb])
+
+
+def _catalog_release_years(frame: pd.DataFrame) -> pd.Series:
+    if "release_year_tmdb" in frame.columns:
+        years = pd.to_numeric(frame["release_year_tmdb"], errors="coerce")
+        if years.notna().any():
+            return years
+    return pd.to_numeric(frame["Year"], errors="coerce")
+
+
+def taste_reference_figure(
+    films_df: pd.DataFrame,
+    projection: str = "pca",
+    explained_variance: tuple[float, float, float] | None = None,
+    uirevision: str | None = None,
+    library_overlay: pd.DataFrame | None = None,
+) -> go.Figure:
+    """2D WebGL starfield of TMDB titles, colored by era; library points as highlights."""
+    from ..film_taste_space import projection_columns
+
+    x_col, y_col, _z_col = projection_columns(projection)
+    background, _ = _split_taste_map_layers(films_df, None)
+    if films_df.empty or x_col not in films_df.columns:
+        return empty_figure("Reference catalog unavailable")
+    if background.empty:
+        return empty_figure("No TMDB reference catalog — ingest the taste-map universe")
+
+    proj_label = "PCA" if projection == "pca" else "UMAP"
+    labels = {x_col: f"{proj_label} 1", y_col: f"{proj_label} 2"}
+    if projection == "pca" and explained_variance:
+        labels[x_col] = f"PC 1 ({explained_variance[0]:.0%} var.)"
+        labels[y_col] = f"PC 2 ({explained_variance[1]:.0%} var.)"
+
+    years = _catalog_release_years(background)
+    year_min = int(years.min()) if years.notna().any() else 1970
+    year_max = int(years.max()) if years.notna().any() else 2025
+    hover_text = background["Name"].astype(str) + " (" + background["Year"].astype(str) + ")"
+
+    fig = go.Figure(
+        go.Scattergl(
+            x=background[x_col],
+            y=background[y_col],
+            mode="markers",
+            name="Catalog",
+            marker={
+                "size": 5,
+                "color": years,
+                "colorscale": UNIVERSE_YEAR_COLORSCALE,
+                "cmin": year_min,
+                "cmax": year_max,
+                "opacity": 0.72,
+                "colorbar": {
+                    "title": {"text": "Release", "font": {"color": "#c5c9e0", "size": 11}},
+                    "tickfont": {"color": "#9aa3c7", "size": 10},
+                    "len": 0.55,
+                    "thickness": 10,
+                    "outlinecolor": UNIVERSE_GRID,
+                },
+            },
+            customdata=_click_customdata(background),
+            text=hover_text,
+            hovertemplate="%{text}<extra>catalog</extra>",
+        )
+    )
+
+    if library_overlay is not None and not library_overlay.empty and x_col in library_overlay.columns:
+        lib = library_overlay.dropna(subset=[x_col, y_col])
+        if not lib.empty:
+            lib_hover = lib["Name"].astype(str) + " (" + lib["Year"].astype(str) + ")"
+            fig.add_trace(
+                go.Scattergl(
+                    x=lib[x_col],
+                    y=lib[y_col],
+                    mode="markers",
+                    name="Your films",
+                    marker={
+                        "size": 9,
+                        "color": "#fde68a",
+                        "opacity": 0.95,
+                        "line": {"width": 1.2, "color": "#ffffff"},
+                    },
+                    customdata=_click_customdata(lib),
+                    text=lib_hover,
+                    hovertemplate="%{text}<extra>your library</extra>",
+                )
+            )
+
+    axis_style = {
+        "gridcolor": UNIVERSE_GRID,
+        "zeroline": False,
+        "linecolor": UNIVERSE_AXIS,
+        "tickfont": {"color": "#9aa3c7", "size": 11},
+        "titlefont": {"color": "#c5c9e0", "size": 12},
+    }
+
+    fig.update_layout(
+        height=340,
+        title={
+            "text": f"Film universe · {len(background):,} titles · your picks in gold",
+            "font": {"color": "#e8ecff", "size": 15},
+            "x": 0.02,
+            "xanchor": "left",
+        },
+        paper_bgcolor=UNIVERSE_PANEL_BG,
+        plot_bgcolor=UNIVERSE_PANEL_BG,
+        font={"color": "#c5c9e0"},
+        xaxis_title=labels[x_col],
+        yaxis_title=labels[y_col],
+        xaxis=axis_style,
+        yaxis=axis_style,
+        margin={"l": 48, "r": 8, "t": 52, "b": 48},
+        uirevision=uirevision or "taste-reference",
+        showlegend=False,
+        hoverlabel={"bgcolor": "#151b2e", "bordercolor": "#4c1d95", "font": {"color": "#e8ecff"}},
+    )
+    return fig
+
+
 def taste_map_figure(
     films_df: pd.DataFrame,
     projection: str = "pca",
     dimensions: int = 3,
     explained_variance: tuple[float, float, float] | None = None,
     color_by: str = "cluster",
+    highlight_df: pd.DataFrame | None = None,
+    uirevision: str | None = None,
 ) -> go.Figure:
-    """2D or 3D scatter in PCA or UMAP space with configurable color encoding."""
+    """2D or 3D scatter of your library subset (TMDB cloud lives on the reference chart)."""
     from ..film_taste_space import projection_columns
 
     x_col, y_col, z_col = projection_columns(projection)
     if films_df.empty or x_col not in films_df.columns:
         return empty_figure("Taste map unavailable — run training to compute embeddings")
 
-    plot_df = films_df.copy()
+    _background, foreground = _split_taste_map_layers(films_df, highlight_df)
+    if foreground.empty:
+        return empty_figure("No films match the current filters")
+
+    plot_df = foreground.copy()
     if "err" not in plot_df.columns:
         plot_df["err"] = float("nan")
     if "pred" not in plot_df.columns:
@@ -219,7 +377,6 @@ def taste_map_figure(
             labels[z_col] = f"PC 3 ({explained_variance[2]:.0%} var.)"
 
     color_field, color_args, title_suffix = _taste_color_encoding(color_by)
-    dim_label = "2D" if dimensions == 2 else "3D"
     hover = {
         "Year": True,
         "Rating": ":.1f",
@@ -248,9 +405,10 @@ def taste_map_figure(
         )
         fig.update_traces(marker={"size": 8, "opacity": 0.85, "line": {"width": 0.5, "color": "#ffffff"}})
         fig.update_layout(
-            title=f"{proj_label} {dim_label} taste map (colored by {title_suffix})",
+            title=f"Your library — {len(plot_df)} films ({title_suffix})",
             xaxis_title=labels[x_col],
             yaxis_title=labels[y_col],
+            uirevision=uirevision or "taste-map",
         )
         return fig
 
@@ -270,7 +428,8 @@ def taste_map_figure(
     )
     fig.update_traces(marker={"size": 5, "opacity": 0.88, "line": {"width": 0.5, "color": "#ffffff"}})
     fig.update_layout(
-        title=f"{proj_label} {dim_label} taste map (colored by {title_suffix})",
+        title=f"Your library — {len(plot_df)} films ({title_suffix})",
+        uirevision=uirevision or "taste-map",
         scene={
             "xaxis_title": labels[x_col],
             "yaxis_title": labels[y_col],

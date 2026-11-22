@@ -1,6 +1,5 @@
 """Shared constants for TMDB access, features, and model training."""
 
-import tempfile
 from pathlib import Path
 
 # --- TMDB / HTTP ---
@@ -11,7 +10,9 @@ TMDB_DEFAULT_HEADERS = {
 }
 TMDB_REQUEST_TIMEOUT_S = 30
 TMDB_CACHE_SLEEP_S = 0.25
-CACHE_DIR = Path(tempfile.mkdtemp(prefix="tmdb_cache_"))
+TMDB_MAX_RETRIES = 6
+TMDB_RETRY_BACKOFF_S = 2.0
+CACHE_DIR = Path(__file__).resolve().parents[2] / "tmdb_cache"
 
 # --- Data paths ---
 DEFAULT_RATINGS_PATH = "../inputs/ratings.csv"
@@ -29,6 +30,11 @@ EMBEDDING_PCA_COMPONENTS = 32
 EMBEDDING_CACHE_FILE = "text_embeddings_v2.csv"
 WATCHED_EMBEDDING_CACHE_FILE = "text_embeddings_watched.csv"
 WATCHED_UMAP_CACHE_FILE = "watched_umap_coords.csv"
+UNIVERSE_EMBEDDING_CACHE_FILE = "text_embeddings_universe.csv"
+UNIVERSE_UMAP_CACHE_FILE = "universe_umap_coords.csv"
+UNIVERSE_CATALOG_FILE = "tmdb_universe_catalog.csv"
+DEFAULT_UNIVERSE_MAX_FILMS = 8000
+UNIVERSE_MIN_VOTE_COUNT = 50
 RATED_UMAP_CACHE_FILE = "text_umap_coords_v2.csv"
 DEFAULT_N_CLUSTERS = 6
 

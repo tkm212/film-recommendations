@@ -2,18 +2,20 @@
 
 import dash
 import pandas as pd
-from dash import Input, Output, callback, dcc, html
+from dash import Input, Output, callback, callback_context, dcc, html
 from dash.development.base_component import Component
+from dash.exceptions import PreventUpdate
 
 from ...film_taste_space import (
     cluster_insights,
     cluster_summary,
     nearest_neighbor_films,
     nonlinear_projection_label,
+    recommend_similar_films,
 )
 from .. import data
 from ..components import card, data_table, page_header, section_title
-from ..figures import empty_figure, taste_map_figure, taste_timeline_figure
+from ..figures import empty_figure, taste_map_figure, taste_reference_figure, taste_timeline_figure
 from ..film_detail import detail_placeholder, film_detail_card, resolve_film_row
 from ..theme import COLORS
 
@@ -48,6 +50,14 @@ NEIGHBOR_COLUMNS = [
     {"name": "Similarity", "id": "similarity", "type": "numeric", "format": {"specifier": ".3f"}},
     {"name": "Cluster", "id": "cluster_label"},
     {"name": "Your rating", "id": "Rating"},
+]
+
+RECOMMEND_COLUMNS = [
+    {"name": "Film", "id": "Name"},
+    {"name": "Year", "id": "Year"},
+    {"name": "Similarity", "id": "similarity", "type": "numeric", "format": {"specifier": ".3f"}},
+    {"name": "Predicted", "id": "pred"},
+    {"name": "Genres", "id": "genres"},
 ]
 
 
@@ -96,7 +106,8 @@ def layout() -> html.Div:
             card([
                 html.P(
                     "PCA/UMAP and clustering need cached embeddings from ingest or train. "
-                    "Add inputs/diary.csv for all watches, then run uv run python scripts/main.py --ingest.",
+                    "Run uv run python scripts/main.py --ingest to build the TMDB catalog and map your "
+                    "Letterboxd exports (diary / ratings / watched.csv).",
                     style={"color": COLORS["text_secondary"], "margin": 0},
                 ),
             ]),
@@ -188,7 +199,7 @@ def layout() -> html.Div:
     return html.Div([
         page_header(
             "Taste map",
-            "Explore watches in embedding space: PCA or UMAP, 2D or 3D, with clusters, timeline, and neighbors.",
+            "Your library in 3D above; the film universe below is the full TMDB catalog in embedding space.",
         ),
         filter_toolbar,
         map_toolbar,
@@ -207,9 +218,23 @@ def layout() -> html.Div:
                             html.Div("Nearest in embedding space", className="metric-label"),
                             data_table("tm-neighbors", NEIGHBOR_COLUMNS, page_size=8),
                         ]),
+                        card([
+                            html.Div("Similar — not in your library", className="metric-label"),
+                            html.Div(
+                                "Discovery picks from the TMDB map, closest in plot space.",
+                                className="detail-meta",
+                                style={"marginBottom": "8px"},
+                            ),
+                            data_table("tm-recommendations", RECOMMEND_COLUMNS, page_size=8),
+                        ]),
                     ],
                 ),
             ],
+        ),
+        section_title("Film universe"),
+        card(
+            [dcc.Graph(id="tm-reference", figure=empty_figure(), config={"displayModeBar": True})],
+            class_name="card universe-panel",
         ),
         section_title("Watch timeline"),
         card([dcc.Graph(id="tm-timeline", config={"displayModeBar": False})]),
@@ -228,8 +253,15 @@ def _filtered_df(
     n_clusters: int,
     projection: str,
 ) -> pd.DataFrame:
-    df = data.films_with_clusters(n_clusters, projection=projection)
-    return data.filter_films(df, genres=genres, languages=languages, year_range=years, rating_range=ratings)
+    library = data.library_films()
+    filtered = data.filter_films(library, genres=genres, languages=languages, year_range=years, rating_range=ratings)
+    return data.films_with_clusters(n_clusters, projection=projection, subset=filtered)
+
+
+def _click_from_maps(scatter_click, reference_click):
+    if callback_context.triggered_id == "tm-reference":
+        return reference_click
+    return scatter_click
 
 
 def _click_selection(click_data: dict | None) -> tuple[str | None, int | float | None, str]:
@@ -244,12 +276,11 @@ def _click_selection(click_data: dict | None) -> tuple[str | None, int | float |
 
 @callback(
     Output("tm-scatter", "figure"),
+    Output("tm-reference", "figure"),
     Output("tm-timeline", "figure"),
     Output("tm-summary", "data"),
     Output("tm-cluster-cards", "children"),
     Output("tm-count", "children"),
-    Output("tm-selected", "children"),
-    Output("tm-neighbors", "data"),
     Input("tm-clusters", "value"),
     Input("tm-genre", "value"),
     Input("tm-lang", "value"),
@@ -258,7 +289,6 @@ def _click_selection(click_data: dict | None) -> tuple[str | None, int | float |
     Input("tm-color-by", "value"),
     Input("tm-projection", "value"),
     Input("tm-dimensions", "value"),
-    Input("tm-scatter", "clickData"),
 )
 def update_taste_map(
     n_clusters,
@@ -269,59 +299,116 @@ def update_taste_map(
     color_by,
     projection,
     dimensions,
-    click_data,
 ):
     if not data.has_taste_space():
         empty = empty_figure("Taste map unavailable")
-        return empty, empty, [], html.Div(), "", "", []
+        return empty, empty, empty, [], html.Div(), ""
 
     n_clusters = n_clusters or 6
     projection = projection or "pca"
     dimensions = int(dimensions or 3)
-    all_watched = data.get_taste_films()
+    universe = data.get_taste_films()
+    library = data.library_films()
     df = _filtered_df(genres, languages, years, ratings, n_clusters, projection)
 
-    rated_n = int(pd.to_numeric(all_watched["Rating"], errors="coerce").notna().sum())
-    count = f"Showing {len(df)} of {len(all_watched)} watched films ({rated_n} rated)"
+    rated_n = int(pd.to_numeric(library["Rating"], errors="coerce").notna().sum())
+    count = f"Highlighting {len(df)} of {len(library)} library films ({rated_n} rated)"
+    if "in_library" in universe.columns and (~universe["in_library"]).any():
+        count += f" · {len(universe):,} films on map"
 
     if df.empty:
         empty = empty_figure()
-        return empty, empty, [], _cluster_cards([]), count, "", []
+        return empty, empty, empty, [], _cluster_cards([]), count
 
     explained = data.get_pca_explained() if projection == "pca" else None
+    uirev = f"{projection}-{dimensions}-{color_by or 'cluster'}-{n_clusters}"
     fig = taste_map_figure(
-        df,
+        universe,
         projection=projection,
         dimensions=dimensions,
         explained_variance=explained,
         color_by=color_by or "cluster",
+        highlight_df=df,
+        uirevision=uirev,
+    )
+    ref_fig = taste_reference_figure(
+        universe,
+        projection=projection,
+        explained_variance=explained,
+        uirevision=f"ref-{uirev}",
+        library_overlay=df,
     )
     timeline = taste_timeline_figure(df)
     summary_df = cluster_summary(df)
     cards = _cluster_cards(cluster_insights(df))
 
-    name, year, selected_text = _click_selection(click_data)
-    neighbors: list[dict] = []
-    embeddings = data.get_taste_embeddings()
-    if name and year is not None and embeddings is not None:
-        nn = nearest_neighbor_films(all_watched, embeddings, name, year, k=8)
-        if not nn.empty:
-            nn = nn.copy()
-            nn["Rating"] = pd.to_numeric(nn["Rating"], errors="coerce").map(
-                lambda v: f"{v:.1f}" if pd.notna(v) else "—"
-            )
-            neighbors = nn[["Name", "Year", "similarity", "cluster_label", "Rating"]].to_dict("records")
+    return fig, ref_fig, timeline, summary_df.to_dict("records"), cards, count
 
-    return fig, timeline, summary_df.to_dict("records"), cards, count, selected_text, neighbors
+
+def _format_pred(value) -> str:
+    pred = pd.to_numeric(value, errors="coerce")
+    return f"{pred:.2f}" if pd.notna(pred) else "—"
+
+
+def _short_genres(value: str) -> str:
+    parts = [g for g in str(value or "").split("|") if g]
+    return ", ".join(parts[:3]) if parts else "—"
+
+
+@callback(
+    Output("tm-selected", "children"),
+    Output("tm-neighbors", "data"),
+    Output("tm-recommendations", "data"),
+    Input("tm-scatter", "clickData"),
+    Input("tm-reference", "clickData"),
+)
+def update_taste_selection(scatter_click, reference_click):
+    click_data = _click_from_maps(scatter_click, reference_click)
+    """Neighbors and selection label only — do not redraw the map on click/pan."""
+    if not data.has_taste_space():
+        return "", [], []
+
+    name, year, selected_text = _click_selection(click_data)
+    if not name or year is None:
+        raise PreventUpdate
+
+    embeddings = data.get_taste_embeddings()
+    if embeddings is None:
+        return selected_text, [], []
+
+    universe = data.get_taste_films()
+    exclude = data.library_film_keys()
+
+    neighbors_rows: list[dict] = []
+    nn = nearest_neighbor_films(universe, embeddings, name, year, k=8)
+    if not nn.empty:
+        nn = nn.copy()
+        nn["Rating"] = pd.to_numeric(nn["Rating"], errors="coerce").map(lambda v: f"{v:.1f}" if pd.notna(v) else "—")
+        neighbors_rows = nn[["Name", "Year", "similarity", "cluster_label", "Rating"]].to_dict("records")
+
+    rec_rows: list[dict] = []
+    rec = recommend_similar_films(universe, embeddings, name, year, exclude, k=10)
+    if not rec.empty:
+        rec = rec.copy()
+        if "pred" in rec.columns:
+            rec["pred"] = rec["pred"].map(_format_pred)
+        else:
+            rec["pred"] = "—"
+        rec["genres"] = rec["genres"].map(_short_genres)
+        rec_rows = rec[["Name", "Year", "similarity", "pred", "genres"]].to_dict("records")
+
+    return selected_text, neighbors_rows, rec_rows
 
 
 @callback(
     Output("tm-detail", "children"),
     Input("tm-scatter", "clickData"),
+    Input("tm-reference", "clickData"),
 )
-def update_taste_detail(click_data):
+def update_taste_detail(scatter_click, reference_click):
+    click_data = _click_from_maps(scatter_click, reference_click)
     if not click_data or not click_data.get("points"):
-        return detail_placeholder("Click a point in the map to see film details.")
+        raise PreventUpdate
 
     custom = click_data["points"][0].get("customdata")
     if not custom or len(custom) < 2:

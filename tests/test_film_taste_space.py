@@ -14,6 +14,7 @@ from film_recommendations.film_taste_space import (
     cluster_summary,
     fit_pca_coordinates,
     nearest_neighbor_films,
+    recommend_similar_films,
 )
 
 
@@ -76,6 +77,21 @@ class TestNeighborsAndInsights:
         nn = nearest_neighbor_films(films, emb, query["Name"], query["Year"], k=3)
         assert len(nn) == 3
         assert "similarity" in nn.columns
+
+    def test_recommendations_skip_library(
+        self, sample_features_df: pd.DataFrame, sample_embeddings: np.ndarray
+    ) -> None:
+        n = len(sample_features_df)
+        emb = sample_embeddings[:n]
+        films = sample_features_df.copy()
+        query = films.iloc[0]
+        exclude = {(str(films.iloc[1]["Name"]), int(films.iloc[1]["Year"]))}
+        rec = recommend_similar_films(films, emb, query["Name"], query["Year"], exclude, k=3)
+        assert not rec.empty
+        for _, row in rec.iterrows():
+            key = (str(row["Name"]), int(row["Year"]))
+            assert key not in exclude
+            assert key != (str(query["Name"]), int(query["Year"]))
 
     def test_cluster_insights(self, sample_features_df: pd.DataFrame, sample_embeddings: np.ndarray, tmp_path) -> None:
         n = len(sample_features_df)

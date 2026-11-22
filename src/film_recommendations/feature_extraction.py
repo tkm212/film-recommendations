@@ -124,15 +124,18 @@ def create_features(df: pd.DataFrame) -> tuple[pd.DataFrame, list[tuple[str, int
         title = str(r["Name"])
         year = int(r["Year"]) if not pd.isna(r["Year"]) else None
 
-        search = tmdb_search_movie(title, year=year)
-        if not search:
-            missing.append((title, year))
-            continue
-
-        movie_id = search.get("id")
-        if not movie_id:
-            missing.append((title, year))
-            continue
+        movie_id: int | None = None
+        if "tmdb_id" in r.index and pd.notna(r["tmdb_id"]) and r["tmdb_id"]:
+            movie_id = int(r["tmdb_id"])
+        else:
+            search = tmdb_search_movie(title, year=year)
+            if not search:
+                missing.append((title, year))
+                continue
+            movie_id = search.get("id")
+            if not movie_id:
+                missing.append((title, year))
+                continue
 
         details = tmdb_movie_details(movie_id)
         feats = extract_features_from_tmdb(details)

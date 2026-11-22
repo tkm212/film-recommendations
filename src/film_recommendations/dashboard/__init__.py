@@ -36,7 +36,7 @@ def create_app(
         importance (dict[str, pd.DataFrame] | None): Feature-importance tables
             from analyze_model, for the Model page.
         selected_model (str | None): Name of the fitted pipeline shown on Overview.
-        taste_films (pd.DataFrame | None): All watched films for the Taste map page.
+        taste_films (pd.DataFrame | None): TMDB catalog universe with in_library for your Letterboxd titles.
 
     Returns:
         Dash: The configured Dash application.
@@ -56,7 +56,7 @@ def create_app(
     )
 
     # Imported after app creation so dash.register_page can attach to this app.
-    from .pages import about, films, model, overview, taste_map  # noqa: F401
+    from .pages import about, films, model, overview, recommendations, taste_map  # noqa: F401
 
     app.layout = html.Div(
         style={"fontFamily": FONT_FAMILY},
